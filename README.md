@@ -33,7 +33,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 | 화면 모드 | 시스템 설정 따르기 / 라이트 / 다크 (로그인 화면 포함) | `theme` = `system`·`light`·`dark` |
 | 쿠팡 Open API 키 | 업체코드, Access Key, Secret Key · 연결 테스트 | `vendor_id`, `access_key`, `secret_key` |
 | 자동화 | 재고 읽기 주기(초), 자동 품절 켜기·기준 수량, 이미지 공개 주소 | `sync_interval_sec`, `auto_soldout`, `soldout_threshold`, `public_base_url` |
-| 텔레그램 알림 | 봇 토큰, 대화 ID, 보낼 알림(재고·단가변경·내 가격·경쟁 가격·최저가 변동), 빈도, 시간대 | `telegram.{token, chat_id, enabled, topics, frequency, send_from, send_to, outside}` |
+| 텔레그램 알림 | 봇 토큰, 대화 ID, 보낼 알림(재고·단가변경·내 가격·경쟁 가격·최저가 변동·로그인/로그아웃), 빈도, 시간대 | `telegram.{token, chat_id, enabled, topics, frequency, send_from, send_to, outside}` |
 | 로그인 화면 | 상단 이름, 제목, 안내·아래쪽 문구, 강조색, 배경색·배경 이미지, 배치(가운데 / 왼쪽 이미지), 비밀번호 안내 표시 | `login_page.{brand, title, message, footer, accent, bg_color, bg_type, bg_image, layout, show_help}` |
 | 로그인 계정 | 아이디·비밀번호 변경 (바꾸면 다른 기기 로그인은 풀림) | `.env` (`WING_LOGIN_USER`, `WING_LOGIN_PASSWORD_HASH`, `WING_SESSION_SECRET`) |
 | 쿠팡 카테고리 목록 | API로 불러오기 / WING 엑셀 올리기 | `categories.json` |
@@ -94,7 +94,10 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
   `설정 > 이미지 공개 주소` 기준 URL로 쿠팡에 전달됩니다 (쿠팡 서버가 받아갈 수 있는 인터넷 주소 필요).
 - 상세설명: 위지윅 에디터(서식·정렬·목록·링크·이미지 업로드/붙여넣기·HTML 직접 편집). 스크립트·이벤트 속성은 저장 시 제거.
 - 💾 임시저장: 필수값 없이 언제든 저장(Ctrl+S). 쿠팡 등록 후에도 같은 임시저장에 남아 계속 수정·저장 가능.
-- 등록 이력: 체크해서 선택 삭제 · 모두 지우기 · **⬇ 로그 저장**(전체 이력 `.log`, 실패 건은 보낸 내용 포함).
+- 등록 이력: 체크해서 선택 삭제 · 모두 지우기 · **⬇ 로그 저장**(전체 이력 `.log`, 실패 건은 보낸 내용·쿠팡 심사 상태 포함).
+- **쿠팡 심사 상태**: '상품 상태변경이력 조회' API로 승인완료·승인반려 등 상태와 **반려 사유**를 표시 (`reg_status.py`).
+  켠 뒤 30초, 이후 10분마다 자동 확인(승인완료·삭제 제외), '↻ 쿠팡 상태 확인'으로 바로 확인. 새 반려는 대시보드 알림에도 기록.
+  실제 응답은 문서와 달리 `statusName` 필드를 씀 → `status`/`statusName` 둘 다 처리.
   대시보드 '최근 알림'도 같은 방식(선택 삭제 · 모두 지우기 · 로그 저장).
 - CSV: `상품 등록 > CSV 템플릿 다운로드` (엑셀용 UTF-8 BOM, 한글 머리글, `[예시]` 행은 업로드 시 무시).
   한 줄 = 옵션 1개 상품. `구매옵션` 칸에 `색상=블랙;수량=1개` 형식으로 필수 구매옵션을 넣고,
@@ -147,6 +150,8 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 - 동기화 시 쿠팡 목록에 없는 상품(이전 모의 데이터 등)은 DB에서 제거. 한 상품 처리 실패가 전체를 멈추지 않음.
 
 ## 텔레그램 알림
+- **로그인·로그아웃**(선택 항목): 로그인·로그아웃·5번 실패 잠금·비밀번호 변경을 시각·아이디·IP·기기와 함께 **바로** 전송 (빈도·시간대 무시).
+- 메뉴 연결 상태에 텔레그램 줄: 연결됨 / 전송 실패 / 대화 미선택 / 연결 실패 / 알림 꺼짐 (봇 확인은 5분 캐시, 백그라운드).
 `설정 > 텔레그램 알림`: 봇 토큰(@BotFather) → 봇에게 메시지 → 대화 찾기 → 테스트 메시지 → 보낼 알림(재고 / 단가변경) 선택 → 켜기.
 - 재고: 재고 부족, 자동 품절, 재입고 판매재개 · 단가변경: 자동 가격조정, 하한가로 조정 중단
 - 같은 문장은 6시간에 한 번만 전송, 전송은 백그라운드(동기화 지연 없음). 토큰은 config.json(600)에만 저장, 화면에 비표시.
