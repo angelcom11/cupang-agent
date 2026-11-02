@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}WING 매니저{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<aside class="side">
+  <div class="logo">WING<span>매니저</span></div>
+  <nav>
+    {% set ep = request.endpoint %}
+    <a href="{{ url_for('dashboard') }}" class="{{ 'on' if ep=='dashboard' }}">📊 대시보드</a>
+    <a href="{{ url_for('inventory') }}" class="{{ 'on' if ep=='inventory' }}">📦 재고 관리</a>
+    <a href="{{ url_for('prices') }}" class="{{ 'on' if ep=='prices' }}">💹 경쟁가 비교</a>
+    <a href="{{ url_for('register') }}" class="{{ 'on' if ep=='register' }}">➕ 상품 등록</a>
+    <a href="{{ url_for('settings') }}" class="{{ 'on' if ep=='settings' }}">⚙️ 설정</a>
+  </nav>
+  <div class="status">
+    <span class="badge {{ 'live' if mode=='live' else 'mock' }}">{{ '실연동' if mode=='live' else '모의 모드' }}</span>
+    <div>마지막 동기화<br><b id="last-sync">{{ sync.last_sync or '-' }}</b></div>
+    {% if sync.last_error %}<div class="err">⚠ {{ sync.last_error }}</div>{% endif %}
+    <button onclick="syncNow(this)">지금 동기화</button>
+  </div>
+</aside>
+<main>
+  <h1>{% block heading %}{% endblock %}</h1>
+  {% for cat, msg in get_flashed_messages(with_categories=true) %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}
+  {% block content %}{% endblock %}
+</main>
+<script>
+async function syncNow(btn){btn.disabled=true;btn.textContent='동기화 중…';
+  await fetch('/api/sync',{method:'POST'});location.reload();}
+const won = n => n==null ? '-' : n.toLocaleString('ko-KR')+'원';
+addEventListener('load', () => { const a = document.querySelector('nav a.on'), n = a?.parentElement;
+  if (a) n.scrollLeft = a.offsetLeft - n.offsetLeft - (n.clientWidth - a.offsetWidth) / 2; });
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

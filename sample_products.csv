@@ -1,0 +1,4 @@
+display_name,name,category_code,brand,item_name,original_price,sale_price,stock,image_url,delivery_charge,search_tags,description_html,attrs_text
+여성 오버핏 반팔 티셔츠,TS-001 반팔티 화이트,79382,데일리핏,화이트 / FREE,19900,12900,50,https://example.com/tshirt.jpg,0,"반팔티,오버핏",<p>면 100% 반팔 티셔츠</p>,색상=화이트;사이즈=FREE
+여성 기모 맨투맨,,69186,데일리핏,그레이 / M,35000,24900,30,https://example.com/mtm.jpg,3000,"맨투맨,기모",<p>기모 맨투맨</p>,색상=그레이;사이즈=M
+잘못된 행 예시,,,,,,,,,,,,

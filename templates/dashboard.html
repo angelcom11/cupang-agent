@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+{% block heading %}대시보드{% endblock %}
+{% block content %}
+<div class="kpis">
+  <div class="kpi"><small>판매 옵션 수</small><b>{{ kpi.total }}</b></div>
+  <div class="kpi"><small>재고 자산(판매가 기준)</small><b>{{ '{:,}'.format(kpi.stock_value) }}원</b></div>
+  <div class="kpi warn"><small>재고 부족</small><b>{{ kpi.low }}</b></div>
+  <div class="kpi danger"><small>품절·판매중지</small><b>{{ kpi.soldout }}</b></div>
+  <div class="kpi warn"><small>최저가 밀림</small><b>{{ kpi.undercut }}</b></div>
+  <div class="kpi"><small>자동 가격조정 ON</small><b>{{ kpi.auto }}</b></div>
+</div>
+
+<section class="card featured">
+  <h2>★ 주력 상품 <span class="muted">재고 관리에서 ☆를 눌러 지정</span></h2>
+  {% if featured %}
+  <div class="fgrid">
+    {% for r in featured %}
+    <div class="fcard {{ 'off' if not r.on_sale }}">
+      <div class="fhead"><b>{{ r.name }}</b>
+        {% if not r.on_sale %}<span class="pill bad">{{ '자동품절' if r.auto_stopped else '판매중지' }}</span>
+        {% else %}<span class="pill good">판매중</span>{% endif %}</div>
+      <dl>
+        <div><dt>판매가</dt><dd>{{ '{:,}'.format(r.sale_price) }}원</dd></div>
+        <div><dt>재고</dt><dd class="{{ 'bad' if r.stock < cfg.soldout_threshold else '' }}">{{ r.stock }}개</dd></div>
+        <div><dt>경쟁 최저</dt><dd>{{ '{:,}'.format(r.lowest) ~ '원' if r.lowest else '-' }}</dd></div>
+        <div><dt>가격 순위</dt><dd><span class="pill {{ 'good' if r.rank==1 else 'bad' }}">{{ r.rank }}/{{ r.total }}</span></dd></div>
+      </dl>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">아직 지정한 주력 상품이 없습니다. <a href="{{ url_for('inventory') }}">재고 관리</a>에서 ☆를 눌러 추가하세요.</p>
+  {% endif %}
+</section>
+
+<div class="grid2">
+  <section class="card">
+    <div class="alerts-head">
+      <h2>최근 알림</h2>
+      <a class="btn-like sm ghostlink" href="{{ url_for('export_alerts') }}" title="전체 알림을 .log 파일로 저장">⬇ 로그 저장</a>
+    </div>
+    <form method="post" action="{{ url_for('delete_alerts') }}" id="alert-form">
+      {% if alerts %}
+      <div class="bulkbar">
+        <label class="inline"><input type="checkbox" id="al-all"> 전체 선택</label>
+        <span class="muted" id="al-info"></span>
+        <button class="ghost tiny" name="scope" value="selected" id="al-del" disabled
+                onclick="return confirm('선택한 알림을 지울까요?')">선택 삭제</button>
+        <button class="ghost tiny" name="scope" value="all"
+                onclick="return confirm('알림을 모두 지울까요? 지우기 전에 로그 저장을 권장합니다.')">모두 지우기</button>
+      </div>
+      {% endif %}
+      <ul class="alerts">
+      {% for a in alerts %}<li class="{{ a.level }}"><label><input type="checkbox" name="alert_id" value="{{ a.id }}" class="al-chk">
+        <span><time>{{ a.created_at[11:] }}</time>{{ a.message }}</span></label></li>
+      {% else %}<li>알림이 없습니다</li>{% endfor %}
+      </ul>
+    </form>
+  </section>
+  <section class="card">
+    <h2>가격 경쟁 현황</h2>
+    <table>
+      <tr><th>상품</th><th class="r">내 가격</th><th class="r">경쟁 최저</th><th class="c">순위</th></tr>
+      {% for r in rows %}
+      <tr><td>{{ '★ ' if r.featured }}{{ r.name }}</td><td class="r">{{ '{:,}'.format(r.sale_price) }}</td>
+        <td class="r">{{ '{:,}'.format(r.lowest) if r.lowest else '-' }}</td>
+        <td class="c"><span class="pill {{ 'good' if r.rank==1 else 'bad' }}">{{ r.rank }}/{{ r.total }}</span></td></tr>
+      {% else %}
+      <tr><td colspan="4" class="empty">상품이 없습니다. 쿠팡에서 <b>승인 완료</b>된 상품만 표시됩니다 (승인 전 상품은 옵션ID가 없어 조회되지 않음).</td></tr>
+      {% endfor %}
+    </table>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+  const chks = [...document.querySelectorAll('.al-chk')], all = document.getElementById('al-all');
+  if (!all) return;
+  const del = document.getElementById('al-del'), info = document.getElementById('al-info');
+  const upd = () => { const n = chks.filter((c) => c.checked).length;
+    del.disabled = !n; del.textContent = n ? `선택 삭제 (${n})` : '선택 삭제'; info.textContent = n ? `${n}개 선택` : '';
+    all.checked = n === chks.length; };
+  chks.forEach((c) => c.addEventListener('change', upd));
+  all.addEventListener('change', () => { chks.forEach((c) => { c.checked = all.checked; }); upd(); });
+})();
+</script>
+{% endblock %}

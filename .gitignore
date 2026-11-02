@@ -1,0 +1,14 @@
+# 비밀값·내 상점 데이터 — 절대 올리지 않음
+config.json
+*.db
+*.db-journal
+uploads/
+categories.json
+
+# 실행 환경
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.log
+.DS_Store

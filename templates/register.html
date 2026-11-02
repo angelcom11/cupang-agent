@@ -1,0 +1,369 @@
+{% extends 'base.html' %}
+{% block heading %}상품 등록{% endblock %}
+{% block content %}
+<div class="grid2 reg">
+  <section class="card">
+    <h2>단건 등록
+      {% if draft_id %}<span class="pill good">임시저장 #{{ draft_id }} 편집 중</span>
+        <a class="newlink" href="{{ url_for('register') }}">+ 새로 작성</a>{% endif %}</h2>
+    {% set f = form %}
+    {% macro row(label, req=False, id='', hint='') %}<div class="wrow"{% if id %} id="{{ id }}"{% endif %}>
+      <div class="wlabel{{ ' req' if req }}">{{ label }}{% if hint %}<small>{{ hint }}</small>{% endif %}</div>
+      <div class="wfield">{{ caller() }}</div></div>{% endmacro %}
+    {% macro radios(name, options, value, id='') %}<div class="wradio"{% if id %} id="{{ id }}"{% endif %}>{% for k, v in options %}<label><input type="radio" name="{{ name }}" value="{{ k }}" {{ 'checked' if (value or '') == k }}><span>{{ v }}</span></label>{% endfor %}</div>{% endmacro %}
+    <div class="sellmode"><span class="wlabel-inline">판매방식</span>
+      <label class="on"><input type="radio" checked disabled> 판매자배송</label>
+      <label class="off" title="로켓그로스는 입고·물류 정보가 필요해 이 프로그램에서는 지원하지 않습니다"><input type="radio" disabled> 로켓그로스 <small>(미지원)</small></label>
+    </div>
+    <ol class="stepper" id="stepper">
+      {% for sid, label in pf.STEPS %}<li><button type="button" data-go="{{ sid }}" title="{{ loop.index }}. {{ label }}" class="{{ 'err' if sid in error_steps }}"><b>{{ loop.index }}</b><span>{{ label }}</span></button></li>{% endfor %}
+    </ol>
+    <div class="stepbar"><div id="step-progress"></div></div>
+    <form method="post" class="form wing" id="reg-form" data-resume="{{ 1 if resume else 0 }}" data-sub="{{ start_sub }}">
+      {% if draft_id %}<input type="hidden" name="draft_id" value="{{ draft_id }}">{% endif %}
+      <input type="hidden" name="step" id="cur-step" value="{{ start_step }}">
+      {% for k in pf.JSON_KEYS %}<input type="hidden" name="{{ k }}" id="j-{{ k }}">{% endfor %}
+      <input type="hidden" name="search_tags" id="search-tags" value="{{ f.get('search_tags','') }}">
+      <input type="hidden" name="detail_mode" id="detail-mode" value="{{ f.detail_mode or 'editor' }}">
+      <script type="application/json" id="reg-state">{{ form_json|tojson }}</script>
+
+      <fieldset class="sec" id="s-name"><legend>노출상품명</legend>
+        {% call row('노출상품명', True, hint='고객에게 보이는 상품명') %}
+          <input name="display_name" value="{{ f.get('display_name','') }}" maxlength="100" placeholder="브랜드명 + 제품명 (예: 데일리핏 스텐 진공 보온보냉 텀블러 500ml)">
+          <span class="muted cnt" data-for="display_name"></span>
+          <p class="muted">노출상품명은 쿠팡 기준에 맞게 변경될 수 있습니다. 최대 100자.</p>
+        {% endcall %}
+        {% call row('등록상품명', hint='판매자 관리용') %}
+          <input name="name" value="{{ f.get('name','') }}" maxlength="100" placeholder="발주서에 사용되는 상품명 (비우면 노출상품명과 같게)">
+          <span class="muted cnt" data-for="name"></span>
+        {% endcall %}
+      </fieldset>
+
+      <fieldset class="sec" id="s-cat"><legend>카테고리</legend>
+        {% call row('카테고리', True) %}
+          <input type="hidden" name="category_code" id="cat-code" value="{{ f.get('category_code','') }}">
+          <div class="wtabs-static"><b>카테고리 검색</b> 또는 <b>카테고리 선택</b>(단계별)</div>
+          <div class="catpick">
+            <div class="cat-search-wrap">
+              <input type="search" id="cat-search" placeholder="🔍 카테고리 검색 (예: 텀블러, 반소매)" autocomplete="off">
+              <div id="cat-results" class="cat-results" hidden></div>
+            </div>
+            <div class="cat-levels" id="cat-levels"></div>
+            <div class="cat-selected" id="cat-selected">{% if cat_path %}{{ cat_path }} ({{ f.get('category_code') }}){% endif %}</div>
+          </div>
+          <p class="muted" id="meta-msg">카테고리를 고르면 이 카테고리의 필수 옵션·고시정보·구비서류를 쿠팡에서 불러옵니다.</p>
+          <p class="muted">등록 후에는 카테고리를 바꿀 수 없어 수정이 필요하면 새로 등록해야 합니다.
+            {% if not cat.full %}<a href="{{ url_for('settings') }}#categories">설정에서 전체 카테고리 불러오기</a>{% else %}전체 {{ '{:,}'.format(cat.count) }}개 ({{ cat.updated_at }} 기준){% endif %}</p>
+        {% endcall %}
+      </fieldset>
+
+      <fieldset class="sec" id="s-option"><legend>옵션</legend>
+        <div class="wtabs" id="opt-mode">
+          <button type="button" data-mode="single">단일 상품등록</button>
+          <button type="button" data-mode="multi">옵션 상품등록</button>
+        </div>
+        <div id="opt-multi">
+          {% call row('옵션 입력', True, hint='옵션명 최대 3개') %}
+            <div class="optypes" id="optypes"></div>
+            <div class="optsuggest muted" id="opt-suggest"></div>
+            <div class="actions left">
+              <button type="button" class="ghost tiny" id="opt-addtype">+ 옵션명 추가</button>
+              <button type="button" class="tiny" id="opt-build">옵션목록으로 적용</button>
+            </div>
+          {% endcall %}
+        </div>
+        <div id="opt-fixed-row">{% call row('구매옵션', hint='모든 옵션 공통') %}<div class="fixattrs" id="fix-attrs"></div>{% endcall %}</div>
+        {% call row('옵션 목록', True, hint='판매가는 10원 단위') %}
+          <div class="bulkset" id="opt-bulk">
+            <span class="muted">선택 목록 일괄 적용</span>
+            <input type="text" inputmode="numeric" data-bulk="original_price" placeholder="정상가">
+            <input type="text" inputmode="numeric" data-bulk="sale_price" placeholder="판매가">
+            <input type="text" inputmode="numeric" data-bulk="stock" placeholder="재고수량">
+            <button type="button" class="ghost tiny" id="opt-apply">적용</button>
+          </div>
+          <div class="tablewrap"><table class="opttable" id="opt-table"></table></div>
+          <div class="actions left"><button type="button" class="ghost tiny" id="opt-addrow">+ 목록 추가</button>
+            <span class="muted" id="opt-count"></span></div>
+          <p class="muted">할인율 = (정상가 − 판매가) ÷ 정상가. 정상가를 비우면 판매가와 같게 등록됩니다.</p>
+        {% endcall %}
+        {% call row('단위 수량', hint='단위가격 표시용') %}<input type="text" inputmode="numeric" name="unit_count" value="{{ f.unit_count }}" class="short">{% endcall %}
+      </fieldset>
+
+      <fieldset class="sec" id="s-image"><legend>상품이미지</legend>
+        <div class="wtabs"><button type="button" class="on">기본등록</button>
+          <button type="button" disabled title="옵션별 이미지 등록은 아직 지원하지 않습니다">옵션별등록 (미지원)</button></div>
+        {% call row('대표이미지', True, hint='1장') %}
+          <div class="imgbox">
+            <div class="thumb" id="thumb">{% if f.get('image_url') %}<img src="{{ f.get('image_url') }}" alt="">{% else %}<span>대표이미지</span>{% endif %}</div>
+            <div class="imgctl">
+              <label class="btn-like">이미지 등록<input type="file" id="img-file" accept="image/jpeg,image/png,image/gif,image/webp" hidden></label>
+              <span class="muted">또는 이미지 주소</span>
+              <input name="image_url" id="image_url" value="{{ f.get('image_url','') }}" placeholder="https://...">
+              <span class="muted" id="img-msg">권장 1000×1000px (최소 500px), 10MB 이하 JPG·PNG. 정사각형이 아니면 쿠팡이 자동으로 맞춥니다.</span>
+            </div>
+          </div>
+        {% endcall %}
+        {% call row('추가이미지', hint='최대 9장') %}
+          <div class="gallery" id="gallery"></div>
+          <label class="btn-like sm">＋ 추가이미지 등록<input type="file" id="gal-file" accept="image/jpeg,image/png,image/gif,image/webp" multiple hidden></label>
+        {% endcall %}
+      </fieldset>
+
+      <fieldset class="sec" id="s-detail"><legend>상세설명</legend>
+        <div class="wtabs" id="detail-tabs">
+          <button type="button" data-mode="images">이미지 업로드</button>
+          <button type="button" data-mode="editor">에디터 작성</button>
+          <button type="button" data-mode="html">HTML 작성</button>
+        </div>
+        <div class="detail-images" id="detail-images">
+          <p class="muted">여러 장을 한 번에 올릴 수 있고, 올린 순서대로 상세설명이 됩니다. ▲▼로 순서를 바꾸세요.</p>
+          <ol class="imglist" id="content-list"></ol>
+          <label class="btn-like sm">＋ 이미지 등록<input type="file" id="content-file" accept="image/jpeg,image/png,image/gif,image/webp" multiple hidden></label>
+        </div>
+        <div class="wysiwyg" id="detail-editor">
+          <div class="tb" id="tb">
+            <select data-block title="문단 형식">
+              <option value="p">본문</option><option value="h2">제목 1</option><option value="h3">제목 2</option></select>
+            <button type="button" data-cmd="bold" title="굵게"><b>B</b></button>
+            <button type="button" data-cmd="italic" title="기울임"><i>I</i></button>
+            <button type="button" data-cmd="underline" title="밑줄"><u>U</u></button>
+            <label class="tbc" title="글자색">A<input type="color" data-color value="#e11d48"></label>
+            <span class="sep"></span>
+            <button type="button" data-cmd="justifyLeft" title="왼쪽 정렬">⯇</button>
+            <button type="button" data-cmd="justifyCenter" title="가운데 정렬">≡</button>
+            <button type="button" data-cmd="justifyRight" title="오른쪽 정렬">⯈</button>
+            <button type="button" data-cmd="insertUnorderedList" title="글머리 목록">• 목록</button>
+            <button type="button" data-cmd="insertOrderedList" title="번호 목록">1. 목록</button>
+            <span class="sep"></span>
+            <button type="button" id="tb-link" title="링크">🔗</button>
+            <button type="button" id="tb-img" title="이미지 넣기">🖼 이미지</button>
+            <button type="button" data-cmd="insertHorizontalRule" title="구분선">―</button>
+            <button type="button" data-cmd="removeFormat" title="서식 지우기">⌫</button>
+            <button type="button" id="tb-src" class="right" hidden>HTML</button>
+            <input type="file" id="ed-file" accept="image/jpeg,image/png,image/gif,image/webp" hidden>
+          </div>
+          <div class="editor" id="editor" contenteditable="true" data-placeholder="상품 상세설명을 입력하세요. 이미지는 🖼 버튼으로 넣을 수 있습니다."></div>
+          <textarea name="description_html" id="desc-src" class="src" hidden placeholder="HTML 소스를 입력하세요">{{ f.get('description_html','') }}</textarea>
+        </div>
+      </fieldset>
+
+      <fieldset class="sec" id="s-main"><legend>상품 주요정보</legend>
+      <div class="substeps" id="substeps">
+        {% for label in pf.MAIN_SUBS %}<button type="button" data-sub="{{ loop.index0 }}"><b>{{ loop.index }}</b>{{ label }}</button>{% endfor %}
+      </div>
+      <div class="substep" data-sub="0">
+        {% call row('브랜드', True) %}
+          <input name="brand" id="brand" value="{{ f.get('brand','') }}" placeholder="브랜드를 정확하게 입력하면 검색 노출에 유리합니다">
+          <label class="inline"><input type="checkbox" id="brand-none" {{ 'checked' if f.get('brand') in ('', None, 'GENERIC') and f.get('display_name') }}> 브랜드 없음</label>
+        {% endcall %}
+        {% call row('제조사') %}<input name="manufacture" value="{{ f.get('manufacture','') }}" placeholder="비우면 브랜드와 같게">{% endcall %}
+      </div>
+      <div class="substep" data-sub="1">
+        {% call row('인증정보', hint='특정 카테고리는 필수') %}
+          <div class="wradio" id="cert-mode">
+            <label><input type="radio" name="cert_mode" value="target"><span>인증·신고 대상</span></label>
+            <label><input type="radio" name="cert_mode" value="detail"><span>상세페이지 별도표기</span></label>
+            <label><input type="radio" name="cert_mode" value="none"><span>인증·신고 대상 아님</span></label>
+          </div>
+          <div class="row" id="cert-target">
+            <label>인증 종류 <select name="certification_type" id="cert-type" data-value="{{ f.certification_type }}">
+              <option value="">인증·신고 대상 아님</option></select></label>
+            <label id="cert-code-wrap" hidden>인증번호 <input name="certification_code" value="{{ f.get('certification_code','') }}" placeholder="예: CB063R1234-5001"></label>
+          </div>
+        {% endcall %}
+      </div>
+      <div class="substep" data-sub="2">
+        {% call row('병행수입', True) %}{{ radios('parallel_imported', [('', '병행수입 아님'), ('1', '병행수입')], f.parallel_imported) }}
+          <p class="muted">병행수입 상품은 구비서류에 '수입신고필증'을 첨부해야 합니다.</p>{% endcall %}
+        {% call row('미성년자 구매', True) %}{{ radios('adult_only', [('EVERYONE', '가능'), ('ADULT_ONLY', '불가능')], f.adult_only or 'EVERYONE') }}{% endcall %}
+        {% call row('부가세', True) %}{{ radios('tax_type', [('TAX', '과세'), ('FREE', '면세')], f.tax_type or 'TAX') }}{% endcall %}
+        {% call row('상품상태', hint='중고상품 여부') %}
+          {{ radios('offer_condition', pf.OFFER_CONDITIONS.items(), f.offer_condition or 'NEW', id='offer-condition') }}
+          <label id="offer-desc-wrap" {{ '' if (f.offer_condition or '').startswith('USED') else 'hidden' }}>중고 상품 상태 설명
+            <input name="offer_description" value="{{ f.get('offer_description','') }}" maxlength="700" placeholder="예: 박스 개봉, 사용감 거의 없음"></label>
+        {% endcall %}
+      </div>
+      <div class="substep" data-sub="3">
+        {% call row('인당 최대구매수량') %}
+          <div class="wradio" id="maxbuy-mode">
+            <label><input type="radio" name="maxbuy_mode" value="off"><span>설정안함</span></label>
+            <label><input type="radio" name="maxbuy_mode" value="on"><span>설정함</span></label>
+          </div>
+          <div class="inlinefields" id="maxbuy-fields">
+            <input type="text" inputmode="numeric" name="max_per_person_period" value="{{ f.max_per_person_period }}" class="short"> 일 동안 최대
+            <input type="text" inputmode="numeric" name="max_per_person" value="{{ f.max_per_person }}" class="short"> 개 구매 가능
+          </div>
+        {% endcall %}
+        {% call row('판매기간') %}
+          <div class="wradio" id="period-mode">
+            <label><input type="radio" name="period_mode" value="off"><span>설정안함</span></label>
+            <label><input type="radio" name="period_mode" value="on"><span>설정함</span></label>
+          </div>
+          <div class="inlinefields" id="period-fields">
+            <input type="datetime-local" name="sale_start" value="{{ f.get('sale_start','') }}"> ~
+            <input type="datetime-local" name="sale_end" value="{{ f.get('sale_end','') }}">
+          </div>
+        {% endcall %}
+      </div>
+      </fieldset>
+
+      <fieldset class="sec" id="s-keyword"><legend>검색어</legend>
+        {% call row('검색어', hint='최대 20개') %}
+          <div class="tagbox" id="tagbox"><input id="tag-input" placeholder="검색어 입력 후 Enter 또는 콤마(,)"></div>
+          <p class="muted"><span id="tag-count">0</span>/20 · 형태, 소재, 재질, 영문 동의어, 별칭 등 상품과 관련된 단어를 넣으세요. 상품명·카테고리도 검색에 함께 쓰입니다.</p>
+        {% endcall %}
+      </fieldset>
+
+      <fieldset class="sec" id="s-filter"><legend>검색필터</legend>
+        <p class="muted">상품이 쉽게 검색되도록 쿠팡 검색 화면의 필터 값을 정합니다. (예: 운동화 → 색상, 사이즈, 제조연도)</p>
+        <div class="filtergrid" id="filter-attrs"><span class="muted">카테고리를 고르면 나타납니다.</span></div>
+      </fieldset>
+
+      <fieldset class="sec" id="s-notice"><legend>상품정보제공고시</legend>
+        {% call row('상품군', True) %}
+          <select name="notice_category" id="notice-cat" data-value="{{ f.get('notice_category','') }}"><option value="">카테고리를 먼저 고르세요</option></select>
+          <label class="inline"><input type="checkbox" id="notice-all"> 전체 상품 상세페이지 참조</label>
+        {% endcall %}
+        <div class="noticerows" id="notice-fields"></div>
+        <p class="muted">전자상거래법에 따라 고객에게 알려야 하는 정보입니다. 비워 둔 칸은 '상품 상세페이지 참조'로 등록되니 상세설명에 해당 내용이 있어야 합니다.</p>
+      </fieldset>
+
+      <fieldset class="sec" id="s-ship"><legend>배송</legend>
+        {% call row('출고지', True, hint='판매자 주소록') %}
+          <div class="placerow">
+            <select name="outbound_place_code" id="outbound" data-value="{{ f.outbound_place_code }}"><option value="">불러오는 중…</option></select>
+            <button type="button" class="ghost tiny" data-reload-places>↻ 다시 불러오기</button>
+          </div>
+          <span class="muted placeinfo" id="outbound-info"></span>
+        {% endcall %}
+        {% call row('제주/도서산간 배송', True) %}{{ radios('remote_area', [('Y', '가능'), ('N', '불가능')], f.remote_area or 'N') }}{% endcall %}
+        {% call row('택배사', True) %}<select name="delivery_company" class="mid">
+          {% for k, v in pf.COURIERS.items() %}<option value="{{ k }}" {{ 'selected' if f.delivery_company == k }}>{{ v }}</option>{% endfor %}</select>{% endcall %}
+        {% call row('배송방법', True) %}{{ radios('delivery_method', [('SEQUENCIAL', '일반배송'), ('COLD_FRESH', '신선냉동'), ('MAKE_ORDER', '주문제작'), ('AGENT_BUY', '구매대행'), ('VENDOR_DIRECT', '설치배송 또는 판매자 직접전달')], f.delivery_method or 'SEQUENCIAL', id='dlv-method') }}
+          <label id="extra-msg-wrap" {{ '' if f.delivery_method == 'MAKE_ORDER' else 'hidden' }}>주문제작 안내 문구
+            <input name="extra_info_message" value="{{ f.get('extra_info_message','') }}" placeholder="예: 각인 문구를 요청사항에 적어 주세요"></label>
+          <p class="muted" id="agent-note" {{ '' if f.delivery_method == 'AGENT_BUY' else 'hidden' }}>구매대행은 해외구매대행 상품으로 등록되며 구매자 개인통관고유부호를 받습니다.</p>
+        {% endcall %}
+        {% call row('묶음배송', True) %}{{ radios('union_delivery', [('Y', '가능'), ('N', '불가능(개별계산)')], f.union_delivery or 'Y') }}{% endcall %}
+        {% call row('배송비 종류', True) %}{{ radios('delivery_charge_type', pf.CHARGE_TYPES.items(), f.delivery_charge_type or 'FREE', id='charge-type') }}
+          <div class="inlinefields">
+            <span data-charge="NOT_FREE CONDITIONAL_FREE CHARGE_RECEIVED">기본 배송비 <input type="text" inputmode="numeric" name="delivery_charge" value="{{ f.delivery_charge }}" class="short"> 원</span>
+            <span data-charge="CONDITIONAL_FREE">· <input type="text" inputmode="numeric" name="free_ship_over" value="{{ f.free_ship_over }}" class="short"> 원 이상 구매 시 무료</span>
+          </div>
+        {% endcall %}
+        {% call row('출고 소요일', True, hint='주문 후 출고까지') %}
+          <div class="inlinefields"><input type="text" inputmode="numeric" name="outbound_days" value="{{ f.outbound_days }}" class="short"> 일 <span class="muted">(1일로 설정하는 것이 가장 좋습니다)</span></div>
+        {% endcall %}
+      </fieldset>
+
+      <fieldset class="sec" id="s-return"><legend>반품/교환</legend>
+        {% call row('반품/교환지', True) %}
+          <div class="wradio" id="return-mode">
+            <label><input type="radio" name="return_mode" value="book"><span>판매자 주소록</span></label>
+            <label><input type="radio" name="return_mode" value="direct"><span>직접 입력</span></label>
+          </div>
+          <div class="placerow" id="return-book">
+            <select name="return_center_code" id="return-center" data-value="{{ f.return_center_code }}"><option value="">불러오는 중…</option></select>
+            <button type="button" class="ghost tiny" data-reload-places>↻ 다시 불러오기</button>
+          </div>
+          <span class="muted placeinfo" id="return-info"></span>
+          <div class="manualreturn" id="return-manual">
+            <div class="row">
+              <label>반품지명 <input name="return_name" value="{{ f.get('return_name','') }}" placeholder="예: 본사 반품센터"></label>
+              <label>연락처 <input name="return_phone" value="{{ f.get('return_phone','') }}" placeholder="02-1234-5678"></label>
+            </div>
+            <div class="row">
+              <label class="zip">우편번호 <input name="return_zip" value="{{ f.get('return_zip','') }}" inputmode="numeric" maxlength="5"></label>
+              <label>주소 <input name="return_addr" value="{{ f.get('return_addr','') }}"></label>
+            </div>
+            <label>상세주소 <input name="return_addr_detail" value="{{ f.get('return_addr_detail','') }}"></label>
+            <p class="muted">아직 택배사와 계약하지 않았다면 직접 입력하세요. 이 경우 반품 요청 시 자동 회수되지 않습니다.</p>
+          </div>
+        {% endcall %}
+        {% call row('초도배송비(편도)', True, hint='무료배송 상품 반품 시') %}<div class="inlinefields"><input type="text" inputmode="numeric" name="delivery_charge_on_return" value="{{ f.delivery_charge_on_return }}" class="short"> 원</div>{% endcall %}
+        {% call row('반품배송비(편도)', True) %}<div class="inlinefields"><input type="text" inputmode="numeric" name="return_charge" value="{{ f.return_charge }}" class="short"> 원
+          <span class="muted">· 고객 사유 반품 시 왕복배송비(초도 + 반품)가 고객에게 청구됩니다.</span></div>{% endcall %}
+        <label class="inline long"><input type="checkbox" name="remember_defaults"> 배송·반품 설정을 다음 상품에도 기본값으로 쓰기
+          {% if has_saved_defaults %}<span class="muted">(저장된 기본값 사용 중)</span>{% endif %}</label>
+      </fieldset>
+
+      <fieldset class="sec" id="s-docs"><legend>구비서류</legend>
+        <p class="muted">카테고리별로 서류 목록이 다르며, <b class="req">필수</b> 서류는 반드시 올려야 합니다. PDF·HWP·DOC·DOCX·TXT·PNG·JPG, 파일당 5MB 이하.</p>
+        <div class="doclist" id="doc-list"><span class="muted">카테고리를 고르면 이 카테고리에서 요구하는 서류가 나타납니다.</span></div>
+      </fieldset>
+
+      <fieldset class="sec" id="s-confirm"><legend>판매요청</legend>
+        <p class="muted">입력한 내용을 확인하세요. 고칠 곳은 '수정'을 누르면 그 단계로 이동합니다.</p>
+        <dl class="summary" id="summary"></dl>
+        {% call row('WING 아이디', True, hint='vendorUserId') %}<input name="vendor_user_id" value="{{ f.get('vendor_user_id','') }}" placeholder="쿠팡 WING 로그인 아이디" class="mid">{% endcall %}
+        <ul class="muted btnhelp">
+          <li><b>중간저장</b>: 이 프로그램에만 저장 (필수 항목을 다 채우지 않아도 됨)</li>
+          <li><b>저장하기</b>: 쿠팡 WING에 '임시저장' 상태로 등록 — WING에서 확인 후 판매요청</li>
+          <li><b>판매요청</b>: 쿠팡에 바로 승인요청 — 승인되면 판매 시작일부터 판매</li>
+        </ul>
+        {% if preview %}<h3>요청 본문 (POST /seller-products)</h3><pre class="json">{{ preview }}</pre>{% endif %}
+      </fieldset>
+
+      <div class="actions sticky wiz">
+        <button name="action" value="draft" class="ghost" id="btn-draft" formnovalidate>중간저장</button>
+        <span class="muted" id="dirty"></span>
+        <span class="spacer"></span>
+        <button type="button" class="ghost" id="btn-prev">← 이전</button>
+        <button type="button" id="btn-next">다음 →</button>
+        <button name="action" value="preview" class="ghost" id="btn-preview">미리보기</button>
+        <button name="action" value="save" class="ghost strong" id="btn-save">저장하기</button>
+        <button name="action" value="request" id="btn-submit">판매요청</button>
+      </div>
+    </form>
+  </section>
+
+  <div class="stack">
+    <section class="card">
+      <h2>임시저장 목록</h2>
+      <table>
+        <tr><th>상품명</th><th>상태</th><th>저장 시각</th><th></th></tr>
+        {% for d in drafts %}
+        <tr class="{{ 'cur' if d.id == draft_id }}">
+          <td><a href="{{ url_for('register', draft_id=d.id) }}">{{ d.name }}</a></td>
+          <td>{% if d.note %}<span class="pill good">등록됨</span>{% else %}<span class="pill">작성 중</span>{% endif %}</td>
+          <td class="mono">{{ d.updated_at[5:16] }}</td>
+          <td class="r"><a class="btn-like sm" href="{{ url_for('register', draft_id=d.id) }}">불러오기</a>
+            <form method="post" action="{{ url_for('delete_draft', draft_id=d.id) }}" class="inl"
+                  onsubmit="return confirm('이 임시저장을 삭제할까요?')"><button class="ghost tiny">삭제</button></form></td>
+        </tr>
+        {% else %}<tr><td colspan="4" class="muted">임시저장한 상품이 없습니다</td></tr>{% endfor %}
+      </table>
+    </section>
+
+    <section class="card">
+      <h2>CSV 일괄 등록</h2>
+      <ol class="steps muted">
+        <li><a class="btn-like sm" href="{{ url_for('csv_template_download') }}">⬇ CSV 템플릿 다운로드</a></li>
+        <li>엑셀에서 열어 한 줄에 상품 하나씩 입력 (<b>*</b> 표시는 필수). <b>[예시]</b>로 시작하는 줄은 자동으로 건너뜁니다.</li>
+        <li>'CSV UTF-8' 형식으로 저장해서 아래에 올리기</li>
+      </ol>
+      <details class="muted"><summary>컬럼 설명</summary>
+        <code>{{ columns.values()|join(', ') }}</code></details>
+      <form method="post" enctype="multipart/form-data" class="form">
+        <input type="file" name="csv_file" accept=".csv">
+        <label class="inline"><input type="checkbox" name="request_approval"> 바로 승인요청</label>
+        <div class="actions"><button name="action" value="csv">일괄 등록 실행</button></div>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>등록 이력</h2>
+      <table>
+        <tr><th>시간</th><th>상품명</th><th>결과</th></tr>
+        {% for l in logs %}<tr class="{{ '' if l.ok else 'danger' }}"><td>{{ l.created_at[5:] }}</td><td>{{ l.name }}</td><td>{{ l.result }}</td></tr>
+        {% else %}<tr><td colspan="3" class="muted">아직 없음</td></tr>{% endfor %}
+      </table>
+    </section>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='editor.js') }}"></script>
+<script src="{{ url_for('static', filename='category.js') }}"></script>
+<script src="{{ url_for('static', filename='register.js') }}"></script>
+{% endblock %}

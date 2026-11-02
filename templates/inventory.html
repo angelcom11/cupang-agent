@@ -1,0 +1,156 @@
+{% extends 'base.html' %}
+{% block heading %}재고 관리 <small class="live-dot">● 자동 읽기 <span id="tick">{{ cfg.sync_interval_sec }}</span>s</small>{% endblock %}
+{% block content %}
+<section class="card">
+  <p class="muted">
+    {{ cfg.sync_interval_sec }}초마다 쿠팡 재고를 자동으로 읽어와 표를 갱신합니다 (마지막 읽기 <b id="inv-sync">{{ sync.last_sync or '-' }}</b>).
+    {% if cfg.auto_soldout %}재고가 <b>{{ cfg.soldout_threshold }}개 미만</b>이면 자동으로 품절(판매중지) 처리하고, 다시 입고되면 판매를 재개합니다.
+    {% else %}자동 품절 처리는 꺼져 있습니다 (설정에서 변경).{% endif %}
+  </p>
+  {% if items %}
+  <div class="bulkbar">
+    <label class="inline"><input type="checkbox" id="chk-all"> 전체 선택</label>
+    <span class="muted" id="sel-info">선택한 상품 없음</span>
+    <button type="button" class="danger-btn" id="btn-bulk-del" disabled>🗑 선택 삭제</button>
+  </div>
+  {% endif %}
+  <table id="inv-table">
+    <tr><th class="c"></th><th class="c">주력</th><th>상품 / 옵션</th><th>옵션ID</th><th class="c">판매상태</th><th class="r">판매가</th><th class="c">재고</th>
+        <th>재고 변경</th><th>부족 알림 기준</th><th></th></tr>
+    {% for i in items %}
+    {% set fid = 'f' ~ i.vendor_item_id %}
+    <tr data-vid="{{ i.vendor_item_id }}" data-spid="{{ i.seller_product_id }}" data-name="{{ i.name }}"
+        data-onsale="{{ 1 if i.on_sale else 0 }}" data-status="{{ i.status }}"
+        class="{{ 'danger' if not i.on_sale else ('warn' if i.stock <= i.low_stock else '') }}">
+      <td class="c"><input type="checkbox" class="row-chk" value="{{ i.seller_product_id }}" aria-label="{{ i.name }} 선택"></td>
+      <td class="c"><form method="post" action="{{ url_for('toggle_featured', vid=i.vendor_item_id) }}">
+        <button class="star {{ 'on' if i.featured }}" title="주력 상품 지정/해제">{{ '★' if i.featured else '☆' }}</button></form></td>
+      <td>{{ i.name }}</td><td class="mono">{{ i.vendor_item_id }}</td>
+      <td class="c"><form method="post" action="{{ url_for('toggle_sale', vid=i.vendor_item_id) }}" class="salef">
+        <span class="pill sale {{ 'good' if i.on_sale else 'bad' }}">{{ '판매중' if i.on_sale else ('자동품절' if i.auto_stopped else '판매중지') }}</span>
+        <button class="ghost tiny">{{ '중지' if i.on_sale else '재개' }}</button></form></td>
+      <td class="r">{{ '{:,}'.format(i.sale_price) }}</td>
+      <td class="c"><span class="pill stock {{ 'bad' if i.stock < cfg.soldout_threshold or i.stock <= i.low_stock else 'good' }}">{{ i.stock }}</span></td>
+      <td><input type="number" name="stock" min="0" placeholder="{{ i.stock }}" class="sm" form="{{ fid }}"></td>
+      <td><input type="number" name="low_stock" min="0" value="{{ i.low_stock }}" class="sm" form="{{ fid }}"></td>
+      <td class="acts"><form method="post" id="{{ fid }}"><input type="hidden" name="vendor_item_id" value="{{ i.vendor_item_id }}"><button>저장</button></form>
+        <button type="button" class="ghost tiny row-del" title="상품 삭제">🗑</button></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="10" class="empty">상품이 없습니다. 쿠팡에서 <b>승인 완료</b>된 상품만 표시됩니다 (승인 전 상품은 옵션ID가 없어 조회되지 않음).</td></tr>
+    {% endfor %}
+  </table>
+</section>
+
+<dialog id="del-dialog" class="modal">
+  <form method="post" action="{{ url_for('delete_items') }}" id="del-form">
+    <h2>🗑 상품 삭제</h2>
+    <p class="warnbox">쿠팡 상점에서 <b>완전히 삭제</b>되며 되돌릴 수 없습니다. 상품(등록상품ID) 단위로 삭제되므로 <b>그 상품의 모든 옵션</b>이 함께 삭제됩니다.</p>
+    <ul id="del-list" class="del-list"></ul>
+    <div id="del-hidden"></div>
+    <label class="inline" id="stop-wrap"><input type="checkbox" name="stop_first" id="stop-first" checked>
+      판매중인 옵션은 먼저 판매중지한 뒤 삭제 (쿠팡은 판매중인 상품을 삭제할 수 없음)</label>
+    <label class="confirm-label"><span>확인을 위해 <b>삭제</b> 라고 입력하세요</span>
+      <input name="confirm" id="del-confirm" autocomplete="off" placeholder="삭제"></label>
+    <div class="actions">
+      <button type="button" class="ghost" id="del-cancel">취소</button>
+      <button class="danger-btn" id="del-submit" disabled>삭제</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+{% block scripts %}
+<script>
+const INTERVAL = {{ cfg.sync_interval_sec|int }}, TH = {{ cfg.soldout_threshold|int }};
+// ---------- 삭제 ----------
+(() => {
+  const rows = () => [...document.querySelectorAll('#inv-table tr[data-spid]')];
+  const checks = () => [...document.querySelectorAll('.row-chk')];
+  const btn = document.getElementById('btn-bulk-del');
+  if (!btn) return;
+  const info = document.getElementById('sel-info');
+  const all = document.getElementById('chk-all');
+  const selectedSpids = () => [...new Set(checks().filter((c) => c.checked).map((c) => c.value))];
+
+  function refresh() {
+    const n = selectedSpids().length;
+    btn.disabled = !n;
+    btn.textContent = n ? `🗑 선택 삭제 (${n}개 상품)` : '🗑 선택 삭제';
+    info.textContent = n ? `${n}개 상품 선택됨` : '선택한 상품 없음';
+    all.checked = n && checks().every((c) => c.checked);
+  }
+  // 삭제는 상품 단위라, 한 옵션을 고르면 같은 상품의 옵션이 모두 함께 선택된다
+  checks().forEach((c) => c.addEventListener('change', () => {
+    checks().filter((o) => o.value === c.value).forEach((o) => { o.checked = c.checked; });
+    refresh();
+  }));
+  all.addEventListener('change', () => { checks().forEach((c) => { c.checked = all.checked; }); refresh(); });
+
+  const dlg = document.getElementById('del-dialog');
+  const list = document.getElementById('del-list');
+  const hidden = document.getElementById('del-hidden');
+  const confirmInput = document.getElementById('del-confirm');
+  const submit = document.getElementById('del-submit');
+  const stopFirst = document.getElementById('stop-first');
+  const stopWrap = document.getElementById('stop-wrap');
+
+  function open(spids) {
+    list.replaceChildren(); hidden.replaceChildren();
+    let selling = 0, pending = 0;
+    for (const spid of spids) {
+      const opts = rows().filter((r) => r.dataset.spid === spid);
+      const li = document.createElement('li');
+      const b = document.createElement('b'); b.textContent = opts[0].dataset.name;
+      li.append(b, ` · 등록상품ID ${spid} · 옵션 ${opts.length}개`);
+      const sell = opts.filter((r) => r.dataset.onsale === '1').length;
+      if (sell) { selling += sell; li.append(Object.assign(document.createElement('span'), { className: 'pill bad', textContent: `판매중 ${sell}` })); }
+      if (opts.some((r) => r.dataset.status.includes('승인대기'))) {
+        pending++; li.append(Object.assign(document.createElement('span'), { className: 'pill bad', textContent: '승인대기 – 삭제 불가' }));
+      }
+      list.append(li);
+      hidden.append(Object.assign(document.createElement('input'), { type: 'hidden', name: 'seller_product_id', value: spid }));
+    }
+    stopWrap.hidden = !selling;
+    stopFirst.checked = true;
+    confirmInput.value = ''; submit.disabled = true;
+    submit.textContent = `${spids.length}개 상품 삭제`;
+    dlg.showModal(); confirmInput.focus();
+  }
+  confirmInput.addEventListener('input', () => { submit.disabled = confirmInput.value.trim() !== '삭제'; });
+  document.getElementById('del-cancel').addEventListener('click', () => dlg.close());
+  document.getElementById('del-form').addEventListener('submit', () => { submit.disabled = true; submit.textContent = '삭제 중…'; });
+  btn.addEventListener('click', () => open(selectedSpids()));
+  document.querySelectorAll('.row-del').forEach((b) => b.addEventListener('click', () => open([b.closest('tr').dataset.spid])));
+})();
+
+// ---------- 재고 자동 읽기 ----------
+let t = INTERVAL;
+setInterval(async () => {
+  t -= 1; document.getElementById('tick').textContent = t;
+  if (t > 0) return; t = INTERVAL;
+  if (document.getElementById('del-dialog').open) return;  // 삭제 확인 중에는 화면을 바꾸지 않음
+  const d = await (await fetch('/api/inventory')).json();
+  document.getElementById('inv-sync').textContent = d.last_sync || '-';
+  document.getElementById('last-sync').textContent = d.last_sync || '-';
+  const shown = [...document.querySelectorAll('#inv-table tr[data-vid]')].map((r) => r.dataset.vid).sort().join();
+  if (shown !== d.items.map((i) => i.vendor_item_id).sort().join()) { location.reload(); return; }  // 상품 추가·삭제됨
+  for (const i of d.items) {
+    const tr = document.querySelector(`tr[data-vid="${i.vendor_item_id}"]`);
+    if (!tr) continue;
+    const st = tr.querySelector('.stock');
+    if (st.textContent !== String(i.stock)) { tr.classList.add('flashrow'); setTimeout(() => tr.classList.remove('flashrow'), 800); }
+    st.textContent = i.stock;
+    tr.querySelector('input[name=stock]').placeholder = i.stock;
+    st.className = 'pill stock ' + (i.stock < TH || i.stock <= i.low_stock ? 'bad' : 'good');
+    const sale = tr.querySelector('.sale');
+    sale.textContent = i.on_sale ? '판매중' : (i.auto_stopped ? '자동품절' : '판매중지');
+    sale.className = 'pill sale ' + (i.on_sale ? 'good' : 'bad');
+    tr.querySelector('.salef button').textContent = i.on_sale ? '중지' : '재개';
+    tr.dataset.onsale = i.on_sale ? '1' : '0';
+    tr.dataset.status = i.status || '';
+    tr.classList.toggle('danger', !i.on_sale);
+    tr.classList.toggle('warn', !!i.on_sale && i.stock <= i.low_stock);
+  }
+}, 1000);
+</script>
+{% endblock %}

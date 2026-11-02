@@ -1,0 +1,150 @@
+{% extends 'base.html' %}
+{% block heading %}설정{% endblock %}
+{% block content %}
+<div class="grid2">
+  <section class="card">
+    <h2>쿠팡 Open API 키</h2>
+    <p class="muted">WING → 판매자정보 → 추가판매정보 → <b>OPEN API 키 발급</b>에서 확인하세요.
+      저장된 키는 화면에 다시 표시하지 않으며, 빈칸으로 두면 기존 값을 유지합니다.</p>
+    <form method="post" class="form" autocomplete="off">
+      <label>업체코드 (vendorId)
+        <input name="vendor_id" value="{{ cfg.vendor_id or '' }}" placeholder="A00000000"></label>
+      <label><span>Access Key <span class="pill {{ 'good' if status.access_key else 'bad' }}">{{ '저장됨' if status.access_key else '없음' }}</span></span>
+        <input name="access_key" placeholder="{{ '변경할 때만 입력' if status.access_key else 'Access Key' }}"></label>
+      <label><span>Secret Key <span class="pill {{ 'good' if status.secret_key else 'bad' }}">{{ '저장됨' if status.secret_key else '없음' }}</span></span>
+        <input name="secret_key" type="password" autocomplete="new-password" placeholder="{{ '변경할 때만 입력' if status.secret_key else 'Secret Key' }}"></label>
+      <div class="actions">
+        {% if status.access_key %}<button name="action" value="clear_keys" class="ghost"
+          onclick="return confirm('저장된 API 키를 삭제하고 모의 모드로 돌아갈까요?')">키 삭제</button>{% endif %}
+        <button name="action" value="test" class="ghost">연결 테스트</button>
+        <button name="action" value="save_keys">저장</button>
+      </div>
+    </form>
+    <p class="muted">현재: <span class="badge {{ 'live' if mode=='live' else 'mock' }}">{{ '실연동' if mode=='live' else '모의 모드' }}</span>
+      · 키는 서버의 <code>config.json</code>(소유자만 읽기)에 저장됩니다.</p>
+  </section>
+
+  <section class="card">
+    <h2>자동화</h2>
+    <form method="post" class="form">
+      <label>재고 자동 읽기 주기 (초)
+        <input type="number" name="sync_interval_sec" min="5" value="{{ cfg.sync_interval_sec }}"></label>
+      <label class="inline"><input type="checkbox" name="auto_soldout" {{ 'checked' if cfg.auto_soldout }}>
+        재고가 기준 미만이면 자동 품절(판매중지)</label>
+      <label><span>자동 품절 기준 (이 수량 <b>미만</b>이면 품절)</span>
+        <input type="number" name="soldout_threshold" min="0" value="{{ cfg.soldout_threshold }}"></label>
+      <p class="muted">자동으로 품절된 상품은 재고가 기준 이상으로 들어오면 자동으로 판매를 재개합니다.
+        직접 '중지'한 상품은 자동 재개하지 않습니다.</p>
+      <label><span>이미지 공개 주소 (선택)</span>
+        <input name="public_base_url" value="{{ cfg.public_base_url or '' }}" placeholder="https://내도메인.com"></label>
+      <p class="muted">상품 등록에서 직접 올린 이미지는 이 주소로 쿠팡에 전달됩니다. 쿠팡 서버가 이미지를 가져가야 하므로
+        인터넷에서 열리는 주소여야 합니다. 비워 두면 지금 접속한 주소를 씁니다.</p>
+      <div class="actions"><button name="action" value="save_rules">저장</button></div>
+    </form>
+  </section>
+</div>
+
+<section class="card" id="telegram" style="margin-top:18px">
+  <h2>텔레그램 알림
+    {% if tg.enabled and tg.token and tg.chat_id %}<span class="pill good">켜짐</span>{% else %}<span class="pill bad">꺼짐</span>{% endif %}</h2>
+  <div class="grid2">
+    <form method="post" action="{{ url_for('telegram_settings') }}" class="form" autocomplete="off">
+      <label><span>봇 토큰 <span class="pill {{ 'good' if tg_has_token else 'bad' }}">{{ '저장됨' if tg_has_token else '없음' }}</span></span>
+        <input name="token" type="password" autocomplete="new-password"
+               placeholder="{{ '변경할 때만 입력' if tg_has_token else '123456789:AA...' }}"></label>
+      <label><span>대화 ID (chat id)</span>
+        <input name="chat_id" value="{{ tg.chat_id or '' }}" placeholder="'대화 찾기'를 누르면 자동으로 채워집니다"></label>
+      {% if tg_chats %}
+      <div class="chatpick">
+        <span class="muted">봇에게 메시지를 보낸 대화 — 알림 받을 곳을 고르세요</span>
+        {% for c in tg_chats %}
+        <label class="inline"><input type="radio" name="chat_pick" value="{{ c.id }}" {{ 'checked' if c.id == tg.chat_id }}
+               onchange="this.form.chat_id.value=this.value"> {{ c.name }} <span class="muted">({{ c.type }} · {{ c.id }})</span></label>
+        {% endfor %}
+      </div>
+      {% endif %}
+      <fieldset class="topics">
+        <legend>텔레그램으로 보낼 알림</legend>
+        {% for key, (label, desc) in topics.items() %}
+        <label class="inline topic"><input type="checkbox" name="topics" value="{{ key }}" {{ 'checked' if key in (tg.topics or []) }}>
+          <span><b>{{ label }}</b> <span class="muted">{{ desc }}</span></span></label>
+        {% endfor %}
+      </fieldset>
+      {% if mock_competitor_live %}<p class="muted">⚠ 실제 상점 + 모의 경쟁가 상태라 <b>경쟁 가격·최저가 변동</b> 알림은 보내지 않습니다.</p>{% endif %}
+      <fieldset class="topics">
+        <legend>보내는 빈도</legend>
+        <select name="frequency" aria-label="보내는 빈도">
+          {% for key, label in freqs.items() %}
+          <option value="{{ key }}" {{ 'selected' if (tg.frequency or 'realtime') == key }}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <span class="muted">모아서 보내면 정각 기준(10분: :00 :10 :20… / 1시간: 매시 정각)으로 한 메시지에 요약하고,
+          같은 상품의 가격 변동은 '처음 → 마지막' 한 줄로 합칩니다.</span>
+      </fieldset>
+      <fieldset class="topics">
+        <legend>보내는 시간대</legend>
+        <div class="timerow">
+          <span class="tpair"><input type="time" name="send_from" value="{{ tg.send_from or '00:00' }}" aria-label="시작 시각"> 부터</span>
+          <span class="tpair"><input type="time" name="send_to" value="{{ tg.send_to or '00:00' }}" aria-label="끝 시각"> 까지</span>
+        </div>
+        <span class="muted">시작과 끝을 같게 두면 하루 종일 보냅니다. 22:00~07:00처럼 자정을 넘겨도 됩니다.</span>
+        <label class="inline outside"><span>시간대 밖 알림은</span>
+          <select name="outside">
+            <option value="hold" {{ 'selected' if tg.outside != 'drop' }}>모아 두었다가 시작 시각에 보내기</option>
+            <option value="drop" {{ 'selected' if tg.outside == 'drop' }}>보내지 않기</option>
+          </select></label>
+      </fieldset>
+      <label class="inline"><input type="checkbox" name="enabled" {{ 'checked' if tg.enabled }}> 텔레그램 알림 켜기</label>
+      <div class="actions">
+        {% if tg_has_token %}<button name="action" value="clear" class="ghost"
+          onclick="return confirm('텔레그램 연결(봇 토큰·대화 ID)을 삭제할까요?')">연결 해제</button>{% endif %}
+        <button name="action" value="find_chat" class="ghost">대화 찾기</button>
+        <button name="action" value="test" class="ghost">테스트 메시지</button>
+        <button name="action" value="save">저장</button>
+      </div>
+      {% if tg_last or tg.enabled %}<p class="muted tgstatus">
+        {% if tg_last %}<span>최근 전송: {{ tg_last }}</span>{% endif %}
+        {% if tg.enabled %}<span>대기 중 {{ tg_pending }}건{% if not tg_window_open %} · 지금은 보내는 시간대가 아님{% elif tg_next %} · 다음 전송 {{ tg_next.strftime('%H:%M') }}{% endif %}</span>{% endif %}
+      </p>{% endif %}
+    </form>
+    <div class="howto">
+      <h3>연결 방법</h3>
+      <ol class="muted">
+        <li>텔레그램에서 <b>@BotFather</b>에게 <code>/newbot</code>을 보내 봇을 만들고 <b>토큰</b>을 복사</li>
+        <li>왼쪽 '봇 토큰'에 붙여넣기</li>
+        <li>텔레그램에서 방금 만든 봇을 찾아 <b>아무 메시지</b>나 보내기 (단톡방이면 봇을 초대한 뒤 메시지)</li>
+        <li><b>대화 찾기</b> → 대화 선택 → <b>테스트 메시지</b>로 도착 확인</li>
+        <li>보낼 알림을 고르고 <b>알림 켜기</b> 체크 후 저장</li>
+      </ol>
+      <p class="muted">재고 부족처럼 같은 문장의 알림은 6시간에 한 번만 보냅니다. 모의 모드에서는 메시지 앞에 [모의]가 붙습니다.</p>
+    </div>
+  </div>
+</section>
+
+<section class="card" id="categories" style="margin-top:18px">
+  <h2>쿠팡 카테고리 목록</h2>
+  <p>현재: <b>{{ {'sample': '기본(쿠팡 문서 공개 예시)', 'api': '쿠팡 API에서 불러옴', 'file': 'WING 엑셀에서 불러옴'}[cat.source] }}</b>
+    · {{ '{:,}'.format(cat.count) }}개 (등록 가능한 최하위 {{ '{:,}'.format(cat.leaves) }}개)
+    {% if cat.updated_at %}· {{ cat.updated_at }}{% endif %}</p>
+  <div class="grid2">
+    <div>
+      <h3>방법 1. 쿠팡 API로 불러오기 (권장)</h3>
+      <p class="muted">API 키를 저장한 상태에서 누르면 쿠팡의 노출 카테고리 전체를 받아옵니다.</p>
+      <form method="post" action="{{ url_for('load_categories') }}">
+        <button name="action" value="api" {{ 'disabled' if mode != 'live' }}>쿠팡에서 전체 카테고리 불러오기</button>
+        {% if mode != 'live' %}<span class="muted">API 키 저장 후 사용 가능</span>{% endif %}
+      </form>
+    </div>
+    <div>
+      <h3>방법 2. WING 엑셀 파일 올리기</h3>
+      <p class="muted">WING에 로그인한 브라우저에서
+        <a href="https://wing.coupang.com/excel/categories/download/file" target="_blank" rel="noopener">전체 카테고리 엑셀 다운로드</a>
+        후 그 파일을 올리세요.</p>
+      <form method="post" action="{{ url_for('load_categories') }}" enctype="multipart/form-data" class="form">
+        <input type="file" name="cat_file" accept=".xlsx,.csv">
+        <div class="actions"><button name="action" value="file">올리기</button></div>
+      </form>
+    </div>
+  </div>
+</section>
+{% endblock %}

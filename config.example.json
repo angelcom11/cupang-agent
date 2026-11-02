@@ -1,0 +1,19 @@
+{
+  "access_key": "",
+  "secret_key": "",
+  "vendor_id": "A00000000",
+  "sync_interval_sec": 30,
+  "host": "0.0.0.0",
+  "port": 26118,
+  "product_defaults": {
+    "deliveryCompanyCode": "CJGLS",
+    "outboundShippingPlaceCode": "출고지 코드",
+    "returnCenterCode": "반품지 코드",
+    "returnChargeName": "반품지",
+    "companyContactNumber": "010-0000-0000",
+    "returnZipCode": "00000",
+    "returnAddress": "반품지 주소",
+    "returnAddressDetail": "상세주소",
+    "vendorUserId": "WING 로그인 아이디"
+  }
+}
