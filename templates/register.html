@@ -404,13 +404,35 @@
                   onclick="return confirm('선택한 등록 이력을 지울까요?')">선택 삭제</button>
           <button class="ghost tiny" name="scope" value="all"
                   onclick="return confirm('등록 이력을 모두 지울까요? 지우기 전에 로그 저장을 권장합니다.\n(쿠팡에 등록된 상품은 지워지지 않습니다)')">모두 지우기</button>
+          <button class="tiny" id="rg-status" formaction="{{ url_for('refresh_registration_status') }}"
+                  title="쿠팡 '상품 상태변경이력'을 읽어 승인·반려 상태와 사유를 갱신 (조회만)">↻ 쿠팡 상태 확인</button>
         </div>
+        <p class="muted rg-note">쿠팡 심사 상태는 10분마다 자동으로 확인합니다 (승인완료·삭제된 상품 제외). 아무것도 고르지 않고 누르면 확인 중인 이력 전체를 다시 봅니다.</p>
         {% endif %}
         <table>
-          <tr><th class="c chk"></th><th>시간</th><th>상품명</th><th>결과</th></tr>
-          {% for l in logs %}<tr class="{{ '' if l.ok else 'danger' }}"><td class="c chk"><input type="checkbox" name="reg_id" value="{{ l.id }}" class="rg-chk" aria-label="선택"></td>
-            <td>{{ l.created_at[5:] }}</td><td>{{ l.name }}</td><td>{{ l.result }}</td></tr>
-          {% else %}<tr><td colspan="4" class="muted">아직 없음</td></tr>{% endfor %}
+          <tr><th class="c chk"></th><th>시간</th><th>상품명</th><th>결과</th><th>쿠팡 심사 상태</th></tr>
+          {% for l in logs %}{% set rej = l.cp_reason %}
+          <tr class="{{ 'danger' if not l.ok or rej else '' }}"><td class="c chk"><input type="checkbox" name="reg_id" value="{{ l.id }}" class="rg-chk" aria-label="선택"></td>
+            <td>{{ l.created_at[5:] }}</td><td>{{ l.name }}</td><td>{{ l.result }}</td>
+            <td class="cpst">
+              {% if l.cp_status %}
+                <span class="pill {{ 'bad' if rej else ('good' if l.cp_status in ('승인완료', '부분승인완료') else 'wait') }}">{{ l.cp_status }}</span>
+                <small class="muted">{{ l.cp_at[5:16] }}</small>
+                {% if rej %}<div class="reject"><b>반려 사유</b> {{ rej }}</div>
+                {% elif l.cp_comment %}<div class="muted">{{ l.cp_comment }}</div>{% endif %}
+                {% if l.history|length > 1 %}
+                <details class="cphist"><summary>상태변경 이력 {{ l.history|length }}건</summary>
+                  <ol>{% for h in l.history|sort(attribute='createdAt', reverse=true) %}
+                    <li><time>{{ (h.createdAt or '')[5:16]|replace('T', ' ') }}</time> <b>{{ h.status }}</b>
+                      {% if h.comment %}<span>{{ h.comment }}</span>{% endif %} <small class="muted">{{ h.createdBy }}</small></li>
+                  {% endfor %}</ol></details>
+                {% endif %}
+                {% if l.cp_error %}<div class="muted">마지막 확인 실패: {{ l.cp_error }}</div>{% endif %}
+              {% elif l.cp_error %}<span class="pill bad">확인 실패</span><div class="muted">{{ l.cp_error }}</div>
+              {% elif l.ok and (l.seller_product_id or 'sellerProductId=' in l.result) %}<span class="muted">확인 전</span>
+              {% else %}<span class="muted">-</span>{% endif %}
+            </td></tr>
+          {% else %}<tr><td colspan="5" class="muted">아직 없음</td></tr>{% endfor %}
         </table>
       </form>
     </section>
@@ -425,8 +447,9 @@
 (() => {
   const chks = [...document.querySelectorAll('.rg-chk')], all = document.getElementById('rg-all');
   if (!all) return;
-  const del = document.getElementById('rg-del'), info = document.getElementById('rg-info');
+  const del = document.getElementById('rg-del'), info = document.getElementById('rg-info'), st = document.getElementById('rg-status');
   const upd = () => { const n = chks.filter((c) => c.checked).length;
+    st.textContent = n ? `↻ 선택 ${n}건 쿠팡 상태 확인` : '↻ 쿠팡 상태 확인';
     del.disabled = !n; del.textContent = n ? `선택 삭제 (${n})` : '선택 삭제'; info.textContent = n ? `${n}개 선택` : '';
     all.checked = n === chks.length; };
   chks.forEach((c) => c.addEventListener('change', upd));

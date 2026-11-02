@@ -85,6 +85,16 @@ class CoupangClient:
     def get_seller_product(self, seller_product_id) -> dict:
         return self._request("GET", f"{SELLER_API}/seller-products/{seller_product_id}")["data"]
 
+    def get_status_history(self, seller_product_id, max_items: int = 50) -> list[dict]:
+        """상품 상태변경이력 조회 (승인·반려 상태와 사유 comment)."""
+        out, token = [], "1"
+        while token and len(out) < max_items:
+            data = self._request("GET", f"{SELLER_API}/seller-products/{int(seller_product_id)}/histories",
+                                 {"nextToken": token, "maxPerPage": 10})
+            out += data.get("data") or []
+            token = str(data.get("nextToken") or "")
+        return out[:max_items]
+
     def create_product(self, payload: dict) -> dict:
         return self._request("POST", f"{SELLER_API}/seller-products", body=payload)
 

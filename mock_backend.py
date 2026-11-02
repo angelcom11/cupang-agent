@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta
 import random
 import threading
 
@@ -73,6 +74,13 @@ MOCK_GENERIC_META = {
 }
 
 
+_MOCK_REJECT = [
+    "대표이미지 기준 위반: 흰 배경(RGB 255,255,255)이 아니거나 텍스트·워터마크가 포함되어 있습니다.",
+    "상품정보제공고시 누락: '제조국' 항목을 실제 정보로 입력해 주세요 ('상세페이지 참조' 불가 항목).",
+    "카테고리 오등록: 상품 특성에 맞는 카테고리로 다시 등록해 주세요.",
+]
+
+
 class MockCoupangClient:
     mode = "mock"
 
@@ -88,6 +96,7 @@ class MockCoupangClient:
                 "on_sale": True, "status": "승인완료",
             }
         self._next_id = 1300000100
+        self._requested: dict[str, bool] = {}
 
     def fetch_items(self) -> list[dict]:
         with self._lock:
@@ -167,7 +176,25 @@ class MockCoupangClient:
                     "on_sale": True,
                     "status": "임시저장(모의)" + (" · 로켓그로스" if item.get("rocketGrowthItemData") else ""),
                 }
+            self._requested[spid] = bool(payload.get("requested"))
         return {"code": "SUCCESS", "data": spid}
+
+    def get_status_history(self, seller_product_id, max_items: int = 50) -> list[dict]:
+        """모의 심사: 임시저장이면 그대로, 승인요청이면 번호에 따라 승인완료 또는 승인반려(사유 포함)."""
+        spid = int(seller_product_id)
+        base = datetime(2026, 11, 2, 9, 0) + timedelta(minutes=spid % 600)
+        at = lambda m: (base + timedelta(minutes=m)).strftime("%Y-%m-%dT%H:%M:%S")  # noqa: E731
+        rows = [{"createdAt": at(0), "status": "임시저장", "createdBy": "판매자", "comment": "판매자 임시저장"}]
+        if not self._requested.get(str(spid), True):
+            return rows[::-1]
+        rows.append({"createdAt": at(1), "status": "승인요청", "createdBy": "판매자", "comment": "판매자 승인요청"})
+        rows.append({"createdAt": at(2), "status": "심사중", "createdBy": "쿠팡 셀러 시스템", "comment": "승인 관련 정보 생성 중"})
+        if spid % 3 == 0:
+            reason = _MOCK_REJECT[spid % len(_MOCK_REJECT)]
+            rows.append({"createdAt": at(30), "status": "승인반려", "createdBy": "박**", "comment": reason})
+        else:
+            rows.append({"createdAt": at(30), "status": "승인완료", "createdBy": "쿠팡 셀러 시스템", "comment": "승인완료 - Items 생성 완료"})
+        return rows[::-1][:max_items]
 
 
 class MockCompetitorProvider:

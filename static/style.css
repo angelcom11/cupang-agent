@@ -589,3 +589,27 @@ input[type=checkbox],input[type=radio]{accent-color:var(--accent)}
 @media(min-width:1101px){.themeform .muted{flex-basis:auto}}
 .dot.off{background:#98a2b3;box-shadow:none}
 @media(min-width:761px){.side{scrollbar-width:thin;scrollbar-color:transparent transparent}.side:hover{scrollbar-color:var(--field) transparent}}
+/* 등록 이력: 쿠팡 심사 상태 */
+#reg-history td.cpst{min-width:16em;vertical-align:top}
+#reg-history td{vertical-align:top}
+.pill.wait{background:var(--info-soft);color:var(--info)}
+.cpst .reject{margin-top:6px;padding:7px 9px;border-radius:6px;background:var(--bad-soft);border:1px solid var(--bad-line);color:var(--bad);font-size:13px;line-height:1.5;word-break:keep-all;overflow-wrap:anywhere}
+.cpst .reject b{display:block;font-size:12px;margin-bottom:2px}
+.cpst>.muted{margin-top:4px;font-size:12px}
+.cphist{margin-top:6px;font-size:12px}.cphist summary{cursor:pointer;color:var(--text-2)}
+.cphist ol{list-style:none;margin:6px 0 0;padding:0 0 0 10px;border-left:2px solid var(--line);display:flex;flex-direction:column;gap:4px}
+.cphist time{color:var(--text-3);font-variant-numeric:tabular-nums;margin-right:4px}
+.cphist li span{color:var(--text-2);margin-left:4px}
+#rg-status{margin-left:auto}
+.rg-note{margin:0 0 8px;font-size:12px}
+@media(max-width:760px){
+  #reg-history table{min-width:0}
+  #reg-history tr:has(th){display:none}
+  #reg-history tr{display:grid;grid-template-columns:28px minmax(0,1fr);border-bottom:1px solid var(--line);padding:8px 0}
+  #reg-history td{border:0;padding:2px 6px;min-width:0!important;white-space:normal!important}
+  #reg-history td.chk{grid-row:1/span 4;padding-top:4px}
+  #reg-history td:nth-child(2){font-size:12px;color:var(--text-3)}
+  #reg-history td:nth-child(3){font-weight:600;color:var(--ink)}
+  #reg-history td:nth-child(4){font-size:12px;color:var(--text-2)}
+  #reg-history td[colspan]{grid-column:1/-1}
+}

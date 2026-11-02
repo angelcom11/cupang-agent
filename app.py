@@ -23,6 +23,7 @@ from notifier import FREQUENCIES, TIME_RE, TOPICS, TelegramError, TelegramNotifi
 from categories import CategoryError, CategoryStore, nodes_from_api_tree, nodes_from_file
 import auth as wing_auth
 import login_page
+import reg_status
 import health
 import product_form as pf
 import rocket_growth
@@ -72,6 +73,9 @@ sync = SyncService(client, store, competitor, cfg)
 notifier = TelegramNotifier(cfg, lambda: client.mode)
 store.alert_listeners.append(notifier.on_alert)
 sync.event_listeners.append(notifier.on_alert)
+reg_checker = reg_status.StatusChecker(
+    store, lambda: client,
+    on_rejected=lambda name, spid, reason: store.alert("danger", "register", f"쿠팡 승인반려: {name} ({spid}) — {reason}"))
 
 app = Flask(__name__)
 login_auth = wing_auth.Auth(DATA_DIR / ".env")
@@ -367,6 +371,22 @@ def delete_registrations():
     return redirect(url_for("register") + "#reg-history")
 
 
+@app.route("/register/history/status", methods=["POST"])
+def refresh_registration_status():
+    """쿠팡 '상품 상태변경이력'을 읽어 승인·반려 상태와 반려 사유를 갱신한다 (조회만, 상품은 바꾸지 않음)."""
+    ids = [int(i) for i in request.form.getlist("reg_id") if i.isdigit()] or None
+    res = reg_checker.refresh(ids, include_final=bool(ids))
+    if res.get("busy"):
+        flash("이미 쿠팡 상태를 확인하는 중입니다. 잠시 뒤 다시 보세요", "info")
+    elif not (res["checked"] or res["errors"]):
+        flash("확인할 이력이 없습니다 (쿠팡에 등록된 이력만, 승인완료·삭제된 상품은 선택했을 때만 다시 확인)", "info")
+    else:
+        msg = f"쿠팡 상태 {res['checked']}건 확인" + (f" · 새 반려 {res['rejected']}건" if res["rejected"] else "") + \
+              (f" · 실패 {res['errors']}건" if res["errors"] else "")
+        flash(msg, "danger" if res["rejected"] or res["errors"] else "info")
+    return redirect(url_for("register") + "#reg-history")
+
+
 @app.route("/register/history/export.log")
 def export_registrations():
     """등록 이력 전체를 오래된 것부터. 실패 건은 원인 확인용으로 보낸 내용(JSON)도 함께 적는다."""
@@ -375,6 +395,9 @@ def export_registrations():
              f"{'모의' if client.mode == 'mock' else '실연동'} 모드 · {len(rows)}건"]
     for r in rows:
         lines.append(f"{r['created_at']} [{'OK' if r['ok'] else 'FAIL'}] {r['name']} | {r['result']}")
+        if r.get("cp_status"):
+            lines.append(f"    쿠팡 상태: {r['cp_status']} ({r['cp_at']}) {r['cp_comment'] or ''}".rstrip()
+                         + (f" | 반려 사유: {r['cp_reason']}" if r.get("cp_reason") else ""))
         if not r["ok"] and r["payload"]:
             lines.append(f"    payload: {r['payload']}")
     return Response("\n".join(lines) + "\n", mimetype="text/plain; charset=utf-8", headers={
@@ -391,11 +414,11 @@ def _submit(name: str, payload: dict) -> tuple[bool, str]:
     try:
         res = client.create_product(payload)
         msg = ("[모의] " if client.mode == "mock" else "") + f"등록 완료 sellerProductId={res.get('data')}"
-        store.log_registration(name, True, msg, payload)
+        store.log_registration(name, True, msg, payload, mode=client.mode, seller_product_id=res.get("data"))
         flash(f"'{name}' {msg}", "info")
         return True, msg
     except CoupangAPIError as exc:
-        store.log_registration(name, False, str(exc), payload)
+        store.log_registration(name, False, str(exc), payload, mode=client.mode)
         flash(f"'{name}' 등록 실패: {exc}", "danger")
         return False, str(exc)
 
@@ -693,5 +716,6 @@ def api_sync():
 
 if __name__ == "__main__":
     sync.start()
+    reg_checker.start()
     app.config.update(WING_HOST=cfg.get("host", "0.0.0.0"), WING_PORT=int(cfg.get("port", 26118)))
     app.run(host=app.config["WING_HOST"], port=app.config["WING_PORT"], debug=False)

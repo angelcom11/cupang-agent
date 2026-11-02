@@ -298,6 +298,16 @@
 :where(:root[data-theme=dark]) label.ghostlink{background:var(--surface);color:var(--ink)!important;border:1px solid var(--field)}
 :where(:root[data-theme=dark]) label.ghostlink:hover{background:var(--surface-2)}
 :where(:root[data-theme=dark]) .dot.off{background:var(--text-3)}
+:where(:root[data-theme=dark]) .pill.wait{background:var(--info-soft);color:var(--info)}
+:where(:root[data-theme=dark]) .cpst .reject{background:var(--bad-soft);border:1px solid var(--bad-line);color:var(--bad)}
+:where(:root[data-theme=dark]) .cphist summary{color:var(--text-2)}
+:where(:root[data-theme=dark]) .cphist ol{border-left:2px solid var(--line)}
+:where(:root[data-theme=dark]) .cphist time{color:var(--text-3)}
+:where(:root[data-theme=dark]) .cphist li span{color:var(--text-2)}
+@media(max-width:760px){:where(:root[data-theme=dark]) #reg-history tr{border-bottom:1px solid var(--line)}}
+@media(max-width:760px){:where(:root[data-theme=dark]) #reg-history td:nth-child(2){color:var(--text-3)}}
+@media(max-width:760px){:where(:root[data-theme=dark]) #reg-history td:nth-child(3){color:var(--ink)}}
+@media(max-width:760px){:where(:root[data-theme=dark]) #reg-history td:nth-child(4){color:var(--text-2)}}
 /* 수동 보정 */
 :root[data-theme=dark] .wysiwyg{background:var(--surface)}
 :root[data-theme=dark] .editor,:root[data-theme=dark] textarea.src{background:#fff;color:#111827;color-scheme:light}

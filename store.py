@@ -27,6 +27,10 @@ CREATE TABLE IF NOT EXISTS registrations (
 """
 
 
+REG_STATUS_COLS = ("mode", "seller_product_id", "cp_status", "cp_comment", "cp_at", "cp_reason", "cp_history",
+                   "cp_error", "cp_checked")
+
+
 def now() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -42,6 +46,10 @@ class Store:
         for col in ("featured", "auto_stopped"):  # 이전 버전 DB 업그레이드
             if col not in cols:
                 self._q(f"ALTER TABLE rules ADD COLUMN {col} INTEGER DEFAULT 0")
+        cols = {r["name"] for r in self._q("PRAGMA table_info(registrations)")}
+        for col in REG_STATUS_COLS:  # 쿠팡 심사 상태 (상태변경이력 조회 결과)
+            if col not in cols:
+                self._q(f"ALTER TABLE registrations ADD COLUMN {col} TEXT")
 
     def _q(self, sql: str, args=()):
         with self._lock:
@@ -141,12 +149,32 @@ class Store:
         return self._q("SELECT * FROM alerts ORDER BY id DESC LIMIT ?", (limit,))
 
     # registrations
-    def log_registration(self, name: str, ok: bool, result: str, payload: dict):
-        self._q("INSERT INTO registrations(name,result,ok,payload,created_at) VALUES (?,?,?,?,?)",
-                (name, result, int(ok), json.dumps(payload, ensure_ascii=False), now()))
+    def log_registration(self, name: str, ok: bool, result: str, payload: dict, mode: str = "",
+                         seller_product_id: str | None = None):
+        self._q("INSERT INTO registrations(name,result,ok,payload,created_at,mode,seller_product_id) VALUES (?,?,?,?,?,?,?)",
+                (name, result, int(ok), json.dumps(payload, ensure_ascii=False), now(), mode or None,
+                 str(seller_product_id) if seller_product_id else None))
 
     def registrations(self, limit: int = 50) -> list[dict]:
-        return self._q("SELECT id,name,result,ok,created_at FROM registrations ORDER BY id DESC LIMIT ?", (limit,))
+        rows = self._q("SELECT id,name,result,ok,created_at," + ",".join(REG_STATUS_COLS) +
+                       " FROM registrations ORDER BY id DESC LIMIT ?", (limit,))
+        for r in rows:
+            r["history"] = json.loads(r.pop("cp_history") or "[]")
+        return rows
+
+    def registrations_for_status(self) -> list[dict]:
+        return self._q("SELECT id,name,result,ok,mode,seller_product_id,cp_status FROM registrations "
+                       "WHERE ok=1 ORDER BY id DESC LIMIT 500")
+
+    def set_registration_status(self, reg_id: int, spid: str, status=None, comment=None, at=None, reason=None,
+                                history=None, error=None):
+        if error is not None:
+            self._q("UPDATE registrations SET seller_product_id=?, cp_error=?, cp_checked=? WHERE id=?",
+                    (spid, error, now(), reg_id))
+            return
+        self._q("UPDATE registrations SET seller_product_id=?, cp_status=?, cp_comment=?, cp_at=?, cp_reason=?, "
+                "cp_history=?, cp_error=NULL, cp_checked=? WHERE id=?",
+                (spid, status, comment, at, reason, history, now(), reg_id))
 
     def all_registrations(self) -> list[dict]:
         return self._q("SELECT * FROM registrations ORDER BY id")

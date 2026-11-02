@@ -135,6 +135,7 @@ def main(argv=None):
     print(" 끝내려면 이 창을 닫거나 Ctrl+C 를 누르세요.")
     print("=" * 60, flush=True)
     wing.sync.start()
+    wing.reg_checker.start()
     if not args.no_browser:
         open_browser_when_ready(url, port)
     try:
