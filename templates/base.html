@@ -10,11 +10,11 @@
   <div class="logo">WING<span>매니저</span></div>
   <nav>
     {% set ep = request.endpoint %}
-    <a href="{{ url_for('dashboard') }}" class="{{ 'on' if ep=='dashboard' }}">📊 대시보드</a>
-    <a href="{{ url_for('inventory') }}" class="{{ 'on' if ep=='inventory' }}">📦 재고 관리</a>
-    <a href="{{ url_for('prices') }}" class="{{ 'on' if ep=='prices' }}">💹 경쟁가 비교</a>
-    <a href="{{ url_for('register') }}" class="{{ 'on' if ep=='register' }}">➕ 상품 등록</a>
-    <a href="{{ url_for('settings') }}" class="{{ 'on' if ep=='settings' }}">⚙️ 설정</a>
+    <a href="{{ url_for('dashboard') }}" class="{{ 'on' if ep=='dashboard' }}"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>대시보드</a>
+    <a href="{{ url_for('inventory') }}" class="{{ 'on' if ep=='inventory' }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>재고 관리</a>
+    <a href="{{ url_for('prices') }}" class="{{ 'on' if ep=='prices' }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>경쟁가 비교</a>
+    <a href="{{ url_for('register') }}" class="{{ 'on' if ep=='register' }}"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M12 8v8M8 12h8"/></svg>상품 등록</a>
+    <a href="{{ url_for('settings') }}" class="{{ 'on' if ep=='settings' }}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>설정</a>
   </nav>
   <div class="status" id="health">
     <button type="button" class="hsum" id="h-toggle" aria-expanded="false" title="연결 상태 자세히">
@@ -30,7 +30,7 @@
     </div>
     <span class="badge {{ 'live' if mode=='live' else 'mock' }}">{{ '실연동' if mode=='live' else '모의 모드' }}</span>
     <div class="hsync">마지막 동기화<br><b id="last-sync">{{ sync.last_sync or '-' }}</b></div>
-    <div class="err" id="sync-err" {{ '' if sync.last_error else 'hidden' }}>⚠ <span>{{ sync.last_error or '' }}</span></div>
+    <div class="err" id="sync-err" {{ '' if sync.last_error else 'hidden' }}><span>{{ sync.last_error or '' }}</span></div>
     <button onclick="syncNow(this)">지금 동기화</button>
   </div>
 </aside>

@@ -11,7 +11,7 @@
   <div class="bulkbar">
     <label class="inline"><input type="checkbox" id="chk-all"> 전체 선택</label>
     <span class="muted" id="sel-info">선택한 상품 없음</span>
-    <button type="button" class="danger-btn" id="btn-bulk-del" disabled>🗑 선택 삭제</button>
+    <button type="button" class="danger-btn" id="btn-bulk-del" disabled>선택 삭제</button>
   </div>
   {% endif %}
   <table id="inv-table">
@@ -34,7 +34,7 @@
       <td><input type="number" name="stock" min="0" placeholder="{{ i.stock }}" class="sm" form="{{ fid }}"></td>
       <td><input type="number" name="low_stock" min="0" value="{{ i.low_stock }}" class="sm" form="{{ fid }}"></td>
       <td class="acts"><form method="post" id="{{ fid }}"><input type="hidden" name="vendor_item_id" value="{{ i.vendor_item_id }}"><button>저장</button></form>
-        <button type="button" class="ghost tiny row-del" title="상품 삭제">🗑</button></td>
+        <button type="button" class="ghost tiny row-del" title="상품 삭제">삭제</button></td>
     </tr>
     {% else %}
     <tr><td colspan="10" class="empty">상품이 없습니다. 쿠팡에서 <b>승인 완료</b>된 상품만 표시됩니다 (승인 전 상품은 옵션ID가 없어 조회되지 않음).</td></tr>
@@ -44,7 +44,7 @@
 
 <dialog id="del-dialog" class="modal">
   <form method="post" action="{{ url_for('delete_items') }}" id="del-form">
-    <h2>🗑 상품 삭제</h2>
+    <h2>상품 삭제</h2>
     <p class="warnbox">쿠팡 상점에서 <b>완전히 삭제</b>되며 되돌릴 수 없습니다. 상품(등록상품ID) 단위로 삭제되므로 <b>그 상품의 모든 옵션</b>이 함께 삭제됩니다.</p>
     <ul id="del-list" class="del-list"></ul>
     <div id="del-hidden"></div>
@@ -75,7 +75,7 @@ const INTERVAL = {{ cfg.sync_interval_sec|int }}, TH = {{ cfg.soldout_threshold|
   function refresh() {
     const n = selectedSpids().length;
     btn.disabled = !n;
-    btn.textContent = n ? `🗑 선택 삭제 (${n}개 상품)` : '🗑 선택 삭제';
+    btn.textContent = n ? `선택 삭제 (${n}개 상품)` : '선택 삭제';
     info.textContent = n ? `${n}개 상품 선택됨` : '선택한 상품 없음';
     all.checked = n && checks().every((c) => c.checked);
   }
