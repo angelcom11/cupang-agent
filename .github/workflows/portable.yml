@@ -44,9 +44,15 @@ jobs:
           "$exe" --no-browser --port 26150 --data "$RUNNER_TEMP/wing-data" > run.log 2>&1 &
           for i in $(seq 1 40); do curl -sf http://127.0.0.1:26150/api/ping && break; sleep 1; done
           echo; cat run.log
-          for u in / /inventory /prices /register /settings /static/register.js; do
-            code=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:26150$u"); echo "$code $u"; [ "$code" = 200 ]
+          # 로그인 전: 첫 화면은 계정 만들기(처음 실행) → 로그인 화면으로 보냄
+          code=$(curl -s -o /dev/null -w "%{http_code} %{redirect_url}" http://127.0.0.1:26150/); echo "$code"; [[ "$code" == 302*"/setup" ]]
+          # 이 컴퓨터에서 계정 만들기(설정 코드 불필요) → 로그인된 쿠키로 화면 확인
+          curl -s -c jar -b jar -o /dev/null -w "setup %{http_code}\n" -d "user=ci-check&password=ci-check-pass1&confirm=ci-check-pass1" http://127.0.0.1:26150/setup
+          for u in / /inventory /prices /register /settings /static/register.js /static/dark.css; do
+            code=$(curl -s -b jar -o /dev/null -w "%{http_code}" "http://127.0.0.1:26150$u"); echo "$code $u"; [ "$code" = 200 ]
           done
+          curl -s -b jar -c jar -o /dev/null -X POST http://127.0.0.1:26150/logout
+          code=$(curl -s -b jar -o /dev/null -w "%{http_code}" http://127.0.0.1:26150/login); echo "$code /login"; [ "$code" = 200 ]
           kill %1 || true
       - uses: actions/upload-artifact@v4
         with:
