@@ -544,3 +544,7 @@ nav a svg{opacity:.75}
 nav a:hover{border-color:var(--field);background:var(--surface-2)}
 nav a.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-ink)}
 @media(max-width:760px){nav{gap:6px;padding-bottom:2px}nav a{padding:6px 10px;gap:6px}}
+/* 메뉴 아이콘: 글자 크기(1em)에 맞춤 */
+nav a{gap:8px}
+
+nav a svg{width:1em;height:1em;stroke-width:2}
