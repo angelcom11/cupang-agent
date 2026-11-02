@@ -74,7 +74,9 @@ store.alert_listeners.append(notifier.on_alert)
 sync.event_listeners.append(notifier.on_alert)
 
 app = Flask(__name__)
-wing_auth.init_app(app, wing_auth.Auth(DATA_DIR / ".env"))  # 로그인 정보는 .env (config.json 과 분리)
+login_auth = wing_auth.Auth(DATA_DIR / ".env")
+login_auth.listeners.append(lambda text: notifier.notify_now("login", text))
+wing_auth.init_app(app, login_auth)  # 로그인 정보는 .env (config.json 과 분리)
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
 
 
@@ -600,6 +602,7 @@ def telegram_settings():
             if not tg["chat_id"]:
                 raise TelegramError("대화 ID(chat id)를 입력하거나 '대화 찾기'를 눌러 주세요")
             notifier.send_now("✅ WING 매니저 텔레그램 연결 테스트입니다.", tg["token"], tg["chat_id"])
+            notifier.record(True, f"{datetime.now():%m-%d %H:%M:%S} 테스트 메시지 전송 성공")
             cfg["telegram"] = tg
             save_config(cfg)
             flash("테스트 메시지를 보냈습니다. 텔레그램을 확인하세요", "info")
@@ -678,6 +681,7 @@ def api_health():
                     "host": probe["host"], "ip": probe["ip"], "ms": probe["ms"]},
         "addresses": health.addresses(app.config.get("WING_HOST", "0.0.0.0"), port, request.host),
         "hostname": socket.gethostname(),
+        "telegram": notifier.status(force=request.args.get("refresh") == "1"),
     })
 
 

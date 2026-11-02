@@ -22,8 +22,11 @@ TOPICS = {
     "my_price": ("내 가격", "쿠팡에서 내 판매가가 바뀌었을 때 (WING에서 직접 바꾼 경우 포함)"),
     "competitor": ("경쟁 가격", "경쟁 판매자의 가격이 바뀌었을 때"),
     "lowest": ("최저가 변동", "경쟁 최저가가 바뀌었을 때 · 내 가격과의 차이 포함"),
+    "login": ("로그인·로그아웃", "로그인 · 로그아웃 · 로그인 실패로 잠김 · 비밀번호 변경 (시각 · 아이디 · 접속 IP) — 빈도·시간대와 관계없이 바로 보냄"),
 }
-TOPIC_ICON = {"stock": "📦", "price": "🏷", "my_price": "💰", "competitor": "👥", "lowest": "📉"}
+TOPIC_ICON = {"stock": "📦", "price": "🏷", "my_price": "💰", "competitor": "👥", "lowest": "📉", "login": "🔐"}
+INSTANT_TOPICS = {"login"}      # 보안 알림: 모으거나 시간대로 미루지 않고 바로 보낸다
+STATUS_TTL = 300                # 메뉴 표시용 봇 연결 확인(getMe) 결과를 다시 쓰는 시간(초)
 FREQUENCIES = {"realtime": "실시간", "10m": "10분마다 모아서", "1h": "1시간마다 모아서"}
 FREQ_MINUTES = {"10m": 10, "1h": 60}
 ICON = {"danger": "🔴", "warn": "🟠", "info": "🔵"}
@@ -127,6 +130,9 @@ class TelegramNotifier:
         self.mode_fn = mode_fn
         self.clock = clock
         self.last_result: str | None = None
+        self.last_ok: bool | None = None          # 마지막 전송 성공 여부 (메뉴 표시용)
+        self._bot: dict = {}                      # 봇 연결 확인 캐시: {"key", "at", "name" | "error"}
+        self._checking = threading.Event()
         self.next_flush: datetime | None = None
         self._pending: list[Event] = []
         self._lock = threading.Lock()
@@ -160,6 +166,65 @@ class TelegramNotifier:
     @property
     def pending_count(self) -> int:
         return len(self._pending)
+
+    # ---------- 연결 상태 (메뉴 표시) ----------
+    def status(self, force: bool = False) -> dict:
+        tg = self.tg
+        if not tg.get("token"):
+            return {"state": "off", "text": "텔레그램 연결 안 함", "detail": "설정 > 텔레그램 알림에서 봇을 연결하세요"}
+        bot = self._check_bot(tg["token"], force)
+        if bot.get("checking"):
+            return {"state": "wait", "text": "텔레그램 확인 중…", "detail": None}
+        name = f"@{bot['name']}" if bot.get("name") else ""
+        if bot.get("error"):
+            return {"state": "bad", "text": "텔레그램 연결 실패", "detail": bot["error"]}
+        if not tg.get("chat_id"):
+            return {"state": "warn", "text": "텔레그램 대화 미선택", "detail": f"{name} · 설정에서 대화 찾기를 하세요"}
+        if not tg.get("enabled"):
+            return {"state": "off", "text": "텔레그램 알림 꺼짐", "detail": f"{name} 연결됨 · 설정에서 알림 켜기를 체크하세요"}
+        if self.last_ok is False:
+            return {"state": "warn", "text": "텔레그램 전송 실패", "detail": f"{name} · {self.last_result}"}
+        return {"state": "ok", "text": "텔레그램 연결됨", "detail": " · ".join(filter(None, [name, self.last_result]))}
+
+    def _check_bot(self, token: str, force: bool) -> dict:
+        """봇 연결 확인(getMe)은 백그라운드에서 — 메뉴 상태 응답을 텔레그램 응답 시간만큼 늦추지 않는다."""
+        key = token[-8:]
+        cached = self._bot if self._bot.get("key") == key else {}
+        stale = not cached or force or time.time() - cached["at"] >= STATUS_TTL
+        if stale and not self._checking.is_set():
+            self._checking.set()
+
+            def run():
+                try:
+                    me = call(token, "getMe", timeout=5)
+                    self._bot = {"key": key, "at": time.time(), "name": me.get("username", "")}
+                except TelegramError as exc:
+                    self._bot = {"key": key, "at": time.time(), "error": str(exc)}
+                finally:
+                    self._checking.clear()
+            threading.Thread(target=run, daemon=True, name="telegram-check").start()
+        return cached or {"checking": True}
+
+    def record(self, ok: bool, text: str):
+        self.last_ok, self.last_result = ok, text
+
+    # ---------- 바로 보내는 알림 (로그인 등) ----------
+    def notify_now(self, topic: str, text: str):
+        """고른 항목이면 빈도·시간대와 관계없이 바로 보낸다 (백그라운드, 요청을 막지 않음)."""
+        if not self.ready() or topic not in (self.tg.get("topics") or []):
+            return
+        prefix = "[모의] " if self.mode_fn() == "mock" else ""
+        msg = f"{TOPIC_ICON[topic]} {prefix}[{TOPICS[topic][0]}] {text}\n— WING 매니저"
+
+        def run():
+            now = self.clock()
+            try:
+                self.send_now(msg)
+                self.record(True, f"{now:%m-%d %H:%M:%S} 전송 성공 (1건)")
+            except (TelegramError, KeyError) as exc:
+                self.record(False, f"{now:%m-%d %H:%M:%S} 전송 실패: {exc}")
+                log.warning("telegram send failed: %s", exc)
+        threading.Thread(target=run, daemon=True, name="telegram-now").start()
 
     # ---------- 알림 받기 ----------
     def on_alert(self, level: str, kind: str, message: str, **meta):
@@ -204,9 +269,9 @@ class TelegramNotifier:
         try:
             for text in self.render(events, now):
                 self.send_now(text)
-            self.last_result = f"{now:%m-%d %H:%M:%S} 전송 성공 ({len(events)}건)"
+            self.record(True, f"{now:%m-%d %H:%M:%S} 전송 성공 ({len(events)}건)")
         except (TelegramError, KeyError) as exc:
-            self.last_result = f"{now:%m-%d %H:%M:%S} 전송 실패: {exc}"
+            self.record(False, f"{now:%m-%d %H:%M:%S} 전송 실패: {exc}")
             log.warning("telegram send failed: %s", exc)
 
     def render(self, events: list[Event], now: datetime) -> list[str]:

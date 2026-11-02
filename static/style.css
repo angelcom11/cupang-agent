@@ -587,3 +587,5 @@ input[type=checkbox],input[type=radio]{accent-color:var(--accent)}
 .themeform{display:flex;align-items:center;gap:12px 16px;flex-wrap:wrap}.themeform h2{margin:0}
 .themeform .muted{flex-basis:100%}
 @media(min-width:1101px){.themeform .muted{flex-basis:auto}}
+.dot.off{background:#98a2b3;box-shadow:none}
+@media(min-width:761px){.side{scrollbar-width:thin;scrollbar-color:transparent transparent}.side:hover{scrollbar-color:var(--field) transparent}}

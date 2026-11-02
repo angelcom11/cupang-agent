@@ -18,7 +18,7 @@ import re
 import secrets
 import threading
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -81,6 +81,18 @@ class Auth:
         self.setup_code = secrets.token_hex(3).upper()  # 다른 기기에서 첫 계정을 만들 때 필요한 6자리 코드
         self._fails: dict[str, list] = {}
         self._lock = threading.Lock()
+        self.listeners: list = []  # 로그인 기록 알림 (예: 텔레그램) — fn(text)
+
+    def emit(self, what: str, user: str, extra: str = ""):
+        """'로그인: owner · 2026-11-02 16:40:12 · IP 1.2.3.4 · Chrome/Windows' 형태로 알린다."""
+        ip = request.remote_addr or "?"
+        parts = [f"{what}: {user or '-'}", datetime.now().strftime("%Y-%m-%d %H:%M:%S"), f"IP {ip}", _device(), extra]
+        text = " · ".join(p for p in parts if p)
+        for fn in self.listeners:
+            try:
+                fn(text)
+            except Exception:  # 알림 실패가 로그인을 막지 않게
+                log.exception("login listener failed")
 
     @property
     def env(self) -> dict:
@@ -139,6 +151,16 @@ def password_problem(user: str, password: str, confirm: str) -> str | None:
     if password.lower() == user.lower():
         return "아이디와 같은 비밀번호는 쓸 수 없습니다"
     return None
+
+
+def _device() -> str:
+    """접속 기기를 짧게 (브라우저/OS). 모르면 빈 문자열."""
+    ua = request.headers.get("User-Agent", "")
+    browser = next((n for k, n in (("Edg/", "Edge"), ("Whale/", "Whale"), ("SamsungBrowser", "삼성 인터넷"), ("Chrome/", "Chrome"),
+                                   ("Firefox/", "Firefox"), ("Safari/", "Safari")) if k in ua), "")
+    system = next((n for k, n in (("Android", "Android"), ("iPhone", "iPhone"), ("iPad", "iPad"), ("Windows", "Windows"),
+                                  ("Mac OS X", "Mac"), ("Linux", "Linux")) if k in ua), "")
+    return "/".join(filter(None, [browser, system]))
 
 
 def _is_local(ip: str) -> bool:
@@ -216,6 +238,7 @@ def setup():
             auth.set_credentials(user, password)
             log.info("로그인 계정을 만들었습니다: %s (%s)", user, request.remote_addr)
             _login(user, remember=False)
+            auth.emit("관리자 계정 만듦 · 로그인", user)
             flash("로그인 계정을 만들었습니다. 다음부터는 이 아이디와 비밀번호로 로그인하세요.", "info")
             return redirect(url_for("dashboard"))
     return render_template("login.html", mode="setup", error=error, need_code=need_code,
@@ -237,8 +260,10 @@ def login():
             error = f"로그인을 여러 번 틀려 잠시 잠겼습니다. {wait // 60}분 {wait % 60}초 뒤에 다시 시도하세요"
         elif auth.verify(request.form.get("user", "").strip(), request.form.get("password", "")):
             auth.succeeded(ip)
-            _login(auth.user(), remember=bool(request.form.get("remember")))
+            remember = bool(request.form.get("remember"))
+            _login(auth.user(), remember=remember)
             log.info("로그인: %s (%s)", auth.user(), ip)
+            auth.emit("로그인", auth.user(), "로그인 유지 30일" if remember else "")
             return redirect(_safe_next(request.args.get("next")))
         else:
             auth.failed(ip)
@@ -247,11 +272,14 @@ def login():
             error = "아이디 또는 비밀번호가 맞지 않습니다" + (f" (남은 시도 {left}번)" if 0 < left < MAX_FAILS else "")
             if left <= 0:
                 error = f"로그인을 {MAX_FAILS}번 틀려 {LOCK_SEC // 60}분 동안 잠깁니다"
+                auth.emit(f"⚠ 로그인 {MAX_FAILS}번 실패 → {LOCK_SEC // 60}분 잠금", request.form.get("user", "").strip()[:32])
     return render_template("login.html", mode="login", error=error, user=request.form.get("user", ""))
 
 
 @bp.route("/logout", methods=["POST"])
 def logout():
+    if session.get("user"):
+        _auth().emit("로그아웃", session["user"])
     session.clear()
     return redirect(url_for("auth.login"))
 
@@ -270,5 +298,6 @@ def change_login():
         auth.set_credentials(user, password)
         _login(user, remember=session.permanent)
         log.info("로그인 정보를 바꿨습니다: %s (%s)", user, request.remote_addr)
+        auth.emit("로그인 정보 변경", user, "다른 기기 로그인은 풀림")
         flash("로그인 정보를 바꿨습니다. 다른 기기에 남아 있던 로그인은 풀립니다.", "info")
     return redirect(url_for("settings") + "#login")

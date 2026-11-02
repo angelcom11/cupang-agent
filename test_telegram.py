@@ -17,6 +17,8 @@ class FakeTelegram:
         if method == "sendMessage" and ok:
             self.sent.append((json["chat_id"], json["text"]))
             body = {"ok": True, "result": {}}
+        elif method == "getMe" and ok:
+            body = {"ok": True, "result": {"username": "wing_test_bot"}}
         elif method == "getUpdates" and ok:
             body = {"ok": True, "result": [
                 {"message": {"chat": {"id": 111, "type": "private", "first_name": "홍길동"}}},

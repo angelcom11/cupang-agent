@@ -30,10 +30,12 @@
     <button type="button" class="hsum" id="h-toggle" aria-expanded="false" title="연결 상태 자세히">
       <span class="hrow"><i class="dot ok" id="h-app-dot"></i><span id="h-app">프로그램 실행 중</span></span>
       <span class="hrow"><i class="dot wait" id="h-cp-dot"></i><span id="h-cp">쿠팡 연결 확인 중…</span></span>
+      <span class="hrow"><i class="dot wait" id="h-tg-dot"></i><span id="h-tg">텔레그램 확인 중…</span></span>
     </button>
     <div class="hdetail" id="h-detail">
       <div class="hsub" id="h-app-sub">버전 · 실행 시간 확인 중</div>
       <div class="hsub" id="h-cp-sub"></div>
+      <div class="hsub" id="h-tg-sub"></div>
       <div class="hlabel">서버 접속 주소 <small>(누르면 복사)</small></div>
       <ul class="haddr" id="h-addr"><li class="muted">{{ request.host }}</li></ul>
       <div class="hsub" id="h-checked"></div>
@@ -70,6 +72,8 @@ const won = n => n==null ? '-' : n.toLocaleString('ko-KR')+'원';
       const c = h.coupang;
       setDot('h-cp-dot', c.state); $('h-cp').textContent = c.text;
       $('h-cp-sub').textContent = [c.ip && `쿠팡 API ${c.ip}${c.ms != null ? ` · ${c.ms}ms` : ''}`, c.detail].filter(Boolean).join(' · ');
+      const t = h.telegram || { state: 'off', text: '텔레그램 연결 안 함' };
+      setDot('h-tg-dot', t.state); $('h-tg').textContent = t.text; $('h-tg-sub').textContent = t.detail ? '텔레그램 ' + t.detail : '';
       $('h-addr').replaceChildren(...h.addresses.map((a) => {
         const li = document.createElement('li');
         li.className = a.current ? 'cur' : '';
@@ -89,6 +93,7 @@ const won = n => n==null ? '-' : n.toLocaleString('ko-KR')+'원';
       setDot('h-app-dot', 'bad'); $('h-app').textContent = '프로그램 응답 없음';
       $('h-app-sub').textContent = '프로그램이 꺼졌거나 서버와 네트워크가 끊겼습니다. 서버에서 다시 실행하세요.';
       setDot('h-cp-dot', 'wait'); $('h-cp').textContent = '쿠팡 연결 알 수 없음'; $('h-cp-sub').textContent = '';
+      setDot('h-tg-dot', 'wait'); $('h-tg').textContent = '텔레그램 알 수 없음'; $('h-tg-sub').textContent = '';
       $('h-checked').textContent = '마지막 시도 ' + new Date().toLocaleTimeString('ko-KR');
     } finally { clearTimeout(timer); }
   }
