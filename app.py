@@ -21,6 +21,8 @@ from coupang_client import CoupangAPIError, CoupangClient
 from mock_backend import MockCompetitorProvider, MockCoupangClient
 from notifier import FREQUENCIES, TIME_RE, TOPICS, TelegramError, TelegramNotifier, find_chats
 from categories import CategoryError, CategoryStore, nodes_from_api_tree, nodes_from_file
+import auth as wing_auth
+import login_page
 import health
 import product_form as pf
 import rocket_growth
@@ -72,13 +74,13 @@ store.alert_listeners.append(notifier.on_alert)
 sync.event_listeners.append(notifier.on_alert)
 
 app = Flask(__name__)
-app.secret_key = os.urandom(16)
+wing_auth.init_app(app, wing_auth.Auth(DATA_DIR / ".env"))  # 로그인 정보는 .env (config.json 과 분리)
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
 
 
 @app.context_processor
 def inject_globals():
-    return {"mode": client.mode, "sync": sync, "cfg": cfg}
+    return {"mode": client.mode, "sync": sync, "cfg": cfg, "login_page": login_page.get(cfg)}
 
 
 def _price_rows():
@@ -514,6 +516,21 @@ def settings():
                        auto_soldout=bool(request.form.get("auto_soldout")), public_base_url=base)
             save_config(cfg)
             flash("자동화 설정을 저장했습니다", "info")
+        elif action == "save_login_page":
+            lp, errors = login_page.from_form(request.form, login_page.get(cfg))
+            if errors:
+                for e in errors:
+                    flash(e, "danger")
+            else:
+                cfg["login_page"] = lp
+                save_config(cfg)
+                flash("로그인 화면 설정을 저장했습니다", "info")
+            return redirect(url_for("settings") + "#login-page")
+        elif action == "reset_login_page":
+            cfg.pop("login_page", None)
+            save_config(cfg)
+            flash("로그인 화면을 기본 모양으로 되돌렸습니다", "info")
+            return redirect(url_for("settings") + "#login-page")
         return redirect(url_for("settings"))
     status = {k: bool(cfg.get(k)) for k in ("access_key", "secret_key")}
     saved = cfg.get("telegram") or {}
@@ -522,7 +539,8 @@ def settings():
                            tg=tg, tg_has_token=bool(saved.get("token")), tg_chats=session_chats.pop("chats", None),
                            tg_last=notifier.last_result, freqs=FREQUENCIES, tg_pending=notifier.pending_count,
                            tg_next=notifier.upcoming_flush, tg_window_open=notifier.window_open(),
-                           mock_competitor_live=sync.competitor_is_mock_on_live)
+                           mock_competitor_live=sync.competitor_is_mock_on_live,
+                           layouts=login_page.LAYOUTS)
 
 
 session_chats: dict = {}  # '대화 찾기' 결과를 다음 화면 한 번에만 보여 주기 위한 임시 보관

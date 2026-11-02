@@ -17,3 +17,7 @@ __pycache__/
 build/
 dist/
 *.spec
+
+# 로그인 정보 (비밀번호 해시·세션 키)
+.env
+*.tmp

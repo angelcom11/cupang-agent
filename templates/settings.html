@@ -121,6 +121,71 @@
   </div>
 </section>
 
+{% set lp = login_page %}
+<section class="card" id="login-page" style="margin-top:18px">
+  <h2>로그인 화면</h2>
+  <div class="lpgrid">
+    <form method="post" class="form" id="lp-form">
+      <div class="row">
+        <label>상단 이름 <input name="brand" value="{{ lp.brand }}" maxlength="30" placeholder="WING 매니저"></label>
+        <label>제목 <input name="title" value="{{ lp.title }}" maxlength="40" placeholder="로그인"></label>
+      </div>
+      <label><span>안내 문구 <span class="muted">(선택)</span></span>
+        <textarea name="message" rows="2" maxlength="200" placeholder="예: 우리가게 상품 관리 시스템입니다">{{ lp.message }}</textarea></label>
+      <label><span>아래쪽 문구 <span class="muted">(선택)</span></span>
+        <input name="footer" value="{{ lp.footer }}" maxlength="120" placeholder="예: 문의 010-0000-0000"></label>
+      <div class="row">
+        <label>강조색 <span class="colorpick"><input type="color" name="accent" value="{{ lp.accent }}"><code>{{ lp.accent }}</code></span></label>
+        <label>배경색 <span class="colorpick"><input type="color" name="bg_color" value="{{ lp.bg_color }}"><code>{{ lp.bg_color }}</code></span></label>
+      </div>
+      <label>배치
+        <select name="layout">
+          {% for key, label in layouts.items() %}<option value="{{ key }}" {{ 'selected' if lp.layout == key }}>{{ label }}</option>{% endfor %}
+        </select></label>
+      <div class="field">
+        <span class="flabel">배경 이미지 <span class="muted">(JPG·PNG·WEBP, 10MB 이하)</span></span>
+        <div class="lpimg">
+          <div class="thumb" id="lp-thumb">{% if lp.bg_image %}<img src="{{ url_for('uploaded', name=lp.bg_image) }}" alt="">{% else %}없음{% endif %}</div>
+          <div class="imgctl">
+            <label class="btn-like sm ghostlink">이미지 올리기<input type="file" id="lp-file" accept="image/*" hidden></label>
+            <button type="button" class="ghost tiny" id="lp-clear" {{ 'hidden' if not lp.bg_image }}>이미지 빼기</button>
+            <span class="muted" id="lp-msg"></span>
+          </div>
+        </div>
+        <input type="hidden" name="bg_image" id="lp-image" value="{{ lp.bg_image }}">
+        <label class="inline"><input type="checkbox" name="bg_type" value="image" {{ 'checked' if lp.bg_type == 'image' }}> 배경 전체를 이 이미지로 (가운데 카드 배치일 때)</label>
+      </div>
+      <label class="inline"><input type="checkbox" name="show_help" {{ 'checked' if lp.show_help }}> '비밀번호를 잊었으면' 안내 보이기</label>
+      <div class="actions">
+        <button name="action" value="reset_login_page" class="ghost" formnovalidate
+                onclick="return confirm('로그인 화면을 기본 모양으로 되돌릴까요?')">기본값으로</button>
+        <a class="btn-like ghostlink" href="{{ url_for('auth.login') }}?preview=1" target="_blank" rel="noopener">새 창에서 보기</a>
+        <button name="action" value="save_login_page">저장</button>
+      </div>
+    </form>
+    <div class="lppreview">
+      <span class="muted">미리보기 (저장하면 바뀝니다)</span>
+      <div class="lpframe" id="lp-frame"><iframe src="{{ url_for('auth.login') }}?preview=1" title="로그인 화면 미리보기" tabindex="-1" loading="lazy"></iframe></div>
+    </div>
+  </div>
+</section>
+
+<section class="card" id="login" style="margin-top:18px">
+  <h2>로그인 계정</h2>
+  <p class="muted">지금 아이디: <b>{{ login_user or '-' }}</b> · 로그인 유지는 30일입니다. 비밀번호를 바꾸면 다른 기기에 남아 있던 로그인은 풀립니다.</p>
+  <form method="post" action="{{ url_for('auth.change_login') }}" class="form" autocomplete="off">
+    <div class="row">
+      <label>현재 비밀번호 <input type="password" name="current" required autocomplete="current-password"></label>
+      <label><span>새 아이디 <span class="muted">(비우면 그대로)</span></span> <input name="user" placeholder="{{ login_user or '' }}" autocomplete="username"></label>
+    </div>
+    <div class="row">
+      <label>새 비밀번호 <input type="password" name="password" required minlength="8" autocomplete="new-password"></label>
+      <label>새 비밀번호 확인 <input type="password" name="confirm" required minlength="8" autocomplete="new-password"></label>
+    </div>
+    <div class="actions"><button>비밀번호 바꾸기</button></div>
+  </form>
+</section>
+
 <section class="card" id="categories" style="margin-top:18px">
   <h2>쿠팡 카테고리 목록</h2>
   <p>현재: <b>{{ {'sample': '기본(쿠팡 문서 공개 예시)', 'api': '쿠팡 API에서 불러옴', 'file': 'WING 엑셀에서 불러옴'}[cat.source] }}</b>
@@ -147,4 +212,33 @@
     </div>
   </div>
 </section>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const f = document.getElementById('lp-form');
+  if (!f) return;
+  const file = document.getElementById('lp-file'), img = document.getElementById('lp-image'),
+        thumb = document.getElementById('lp-thumb'), msg = document.getElementById('lp-msg'), clear = document.getElementById('lp-clear');
+  const show = (src) => { thumb.replaceChildren(); if (src) { const i = new Image(); i.src = src; i.alt = ''; thumb.append(i); } else thumb.textContent = '없음';
+    clear.hidden = !src; };
+  file.addEventListener('change', async () => {
+    if (!file.files[0]) return;
+    msg.textContent = '올리는 중…';
+    const fd = new FormData(); fd.append('file', file.files[0]);
+    try {
+      const r = await fetch('/api/upload', { method: 'POST', body: fd }), j = await r.json();
+      if (!r.ok) throw new Error(j.error || r.status);
+      img.value = j.name; show('/uploads/' + j.name); msg.textContent = '올렸습니다. 저장을 눌러 적용하세요';
+    } catch (e) { msg.textContent = '실패: ' + e.message; }
+    file.value = '';
+  });
+  clear.addEventListener('click', () => { img.value = ''; show(''); f.bg_type.checked = false;
+    if (f.layout.value === 'split') f.layout.value = 'center'; msg.textContent = '저장을 눌러 적용하세요'; });
+  const box = document.getElementById('lp-frame');  // PC 화면(1280×800)을 줄여서 보여 준다
+  const fit = () => { const k = box.clientWidth / 1280; box.firstElementChild.style.transform = `scale(${k})`; box.style.height = 800 * k + 'px'; };
+  fit(); addEventListener('resize', fit);
+  f.querySelectorAll('input[type=color]').forEach((c) => c.addEventListener('input', () => { c.nextElementSibling.textContent = c.value; }));
+})();
+</script>
 {% endblock %}
