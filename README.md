@@ -7,6 +7,8 @@
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python app.py          # http://<서버IP>:26118
 ```
+처음 접속하면 **로그인 화면**이 뜹니다. 계정이 없으면 관리자 계정 만들기 화면이 먼저 나옵니다
+(다른 기기에서 만들 때는 서버 창(로그)에 나온 6자리 설정 코드 필요).
 `config.json`이 없거나 키가 비어 있으면 **모의 모드**(가짜 상품·경쟁가)로 동작합니다.
 실연동: **설정** 화면에서 업체코드·Access Key·Secret Key 입력 → 연결 테스트 → 저장 (config.json, 권한 600).
 출고지·반품지 코드는 `config.example.json` 의 `product_defaults` 참고.
@@ -22,6 +24,36 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
   → GitHub Actions(`.github/workflows/portable.yml`)가 5종(windows-x64, macos-arm64, macos-x64, linux-x64, linux-arm64)을
   빌드·실행 확인한 뒤 Releases 에 올립니다.
 - 직접 빌드: `pip install pyinstaller && python build_portable.py` (지금 OS용만 만들어집니다).
+
+## 설정 한눈에 보기
+설정 화면(`/settings`)의 항목과 저장 위치입니다. **비밀값은 GitHub 에 올라가지 않습니다** (`.gitignore`).
+
+| 설정 화면 칸 | 내용 | 저장 위치 (`config.json` 키) |
+|---|---|---|
+| 화면 모드 | 시스템 설정 따르기 / 라이트 / 다크 (로그인 화면 포함) | `theme` = `system`·`light`·`dark` |
+| 쿠팡 Open API 키 | 업체코드, Access Key, Secret Key · 연결 테스트 | `vendor_id`, `access_key`, `secret_key` |
+| 자동화 | 재고 읽기 주기(초), 자동 품절 켜기·기준 수량, 이미지 공개 주소 | `sync_interval_sec`, `auto_soldout`, `soldout_threshold`, `public_base_url` |
+| 텔레그램 알림 | 봇 토큰, 대화 ID, 보낼 알림(재고·단가변경·내 가격·경쟁 가격·최저가 변동), 빈도, 시간대 | `telegram.{token, chat_id, enabled, topics, frequency, send_from, send_to, outside}` |
+| 로그인 화면 | 상단 이름, 제목, 안내·아래쪽 문구, 강조색, 배경색·배경 이미지, 배치(가운데 / 왼쪽 이미지), 비밀번호 안내 표시 | `login_page.{brand, title, message, footer, accent, bg_color, bg_type, bg_image, layout, show_help}` |
+| 로그인 계정 | 아이디·비밀번호 변경 (바꾸면 다른 기기 로그인은 풀림) | `.env` (`WING_LOGIN_USER`, `WING_LOGIN_PASSWORD_HASH`, `WING_SESSION_SECRET`) |
+| 쿠팡 카테고리 목록 | API로 불러오기 / WING 엑셀 올리기 | `categories.json` |
+| (상품 등록 화면) 다음 상품에도 기본값으로 쓰기 | 배송·반품·판매방식 기본값 | `register_defaults` |
+
+- 키 이름과 기본값 예시: [`config.example.json`](config.example.json) (복사해서 `config.json` 으로 써도 되고, 설정 화면에서 입력해도 됩니다).
+- 옮기기·백업: `config.json`, `.env`, `wing.db`, `categories.json`, `uploads/` 를 함께 복사하면 그대로 이어서 씁니다
+  (포터블은 `WING-data/` 폴더 하나).
+- 비밀번호를 잊으면 `.env` 에서 `WING_LOGIN_` 으로 시작하는 줄을 지우고 다시 실행 → 계정 다시 만들기.
+
+## 로그인
+- 모든 화면은 로그인 후 사용 (업로드 이미지 `/uploads/…` 는 쿠팡이 가져가야 해서 공개).
+- 로그인 유지: 체크(기본) 시 30일, 끄면 브라우저를 닫을 때까지. 5번 틀리면 5분 잠금(접속 IP 별).
+- 메뉴 맨 아래(모바일은 메뉴 줄 끝) **로그아웃**.
+
+## 화면 디자인
+- 흰 면 + 얇은 선, 강조색은 주황 하나, 본문 14px. 왼쪽 메뉴는 둥근 네모 버튼(선 아이콘 + 글자).
+- 다크 모드 색은 `static/dark.css` — `style.css` 에서 **자동 생성**합니다. `style.css` 를 고친 뒤에는
+  `python gen_dark_css.py` 를 실행하세요 (안 하면 `test_theme.py` 가 실패해서 알려 줌).
+- 상세설명 편집기 본문은 다크 모드에서도 흰 바탕(쿠팡 상품 페이지 모습 그대로).
 
 ## 연결 상태 (메뉴바)
 메뉴바 아래쪽에서 10초마다 확인합니다 (모바일은 위쪽 막대, 누르면 자세히).
@@ -43,6 +75,13 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 | `store.py` | SQLite (상품 스냅샷, 경쟁가 이력, 규칙, 알림, 등록 로그) |
 | `mock_backend.py` | 모의 쿠팡 클라이언트 + 모의 경쟁가 공급자 |
 | `app.py` | 화면: 대시보드 / 재고 / 경쟁가 비교 / 상품 등록(단건·CSV) / 설정 |
+| `auth.py` | 로그인·계정 만들기·로그아웃·비밀번호 변경 (`.env`) |
+| `login_page.py` | 로그인 화면 꾸미기 설정 검사·기본값 |
+| `notifier.py` | 텔레그램 알림 (주제·빈도·시간대) |
+| `health.py` | 메뉴바 연결 상태 |
+| `product_form.py`, `rocket_growth.py`, `categories.py` | 상품 등록 양식·로켓그로스·카테고리 |
+| `portable.py`, `build_portable.py` | 포터블 실행기·빌드 |
+| `gen_dark_css.py` | `style.css` → `static/dark.css` (다크 모드) |
 
 ## 주의
 - 쿠팡 Open API에는 **다른 판매자 가격 조회 API가 없습니다.** 경쟁가 공급자(`fetch(item)`)는
@@ -55,6 +94,8 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
   `설정 > 이미지 공개 주소` 기준 URL로 쿠팡에 전달됩니다 (쿠팡 서버가 받아갈 수 있는 인터넷 주소 필요).
 - 상세설명: 위지윅 에디터(서식·정렬·목록·링크·이미지 업로드/붙여넣기·HTML 직접 편집). 스크립트·이벤트 속성은 저장 시 제거.
 - 💾 임시저장: 필수값 없이 언제든 저장(Ctrl+S). 쿠팡 등록 후에도 같은 임시저장에 남아 계속 수정·저장 가능.
+- 등록 이력: 체크해서 선택 삭제 · 모두 지우기 · **⬇ 로그 저장**(전체 이력 `.log`, 실패 건은 보낸 내용 포함).
+  대시보드 '최근 알림'도 같은 방식(선택 삭제 · 모두 지우기 · 로그 저장).
 - CSV: `상품 등록 > CSV 템플릿 다운로드` (엑셀용 UTF-8 BOM, 한글 머리글, `[예시]` 행은 업로드 시 무시).
   한 줄 = 옵션 1개 상품. `구매옵션` 칸에 `색상=블랙;수량=1개` 형식으로 필수 구매옵션을 넣고,
   고시정보는 '기타 재화'(없으면 첫 종류) + "상세페이지 참조"로 자동 채움. 배송·반품은 저장한 등록 기본값 사용.
