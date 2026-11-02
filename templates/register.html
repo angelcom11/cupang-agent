@@ -390,13 +390,29 @@
       </form>
     </section>
 
-    <section class="card">
-      <h2>등록 이력</h2>
-      <table>
-        <tr><th>시간</th><th>상품명</th><th>결과</th></tr>
-        {% for l in logs %}<tr class="{{ '' if l.ok else 'danger' }}"><td>{{ l.created_at[5:] }}</td><td>{{ l.name }}</td><td>{{ l.result }}</td></tr>
-        {% else %}<tr><td colspan="3" class="muted">아직 없음</td></tr>{% endfor %}
-      </table>
+    <section class="card" id="reg-history">
+      <div class="alerts-head">
+        <h2>등록 이력</h2>
+        <a class="btn-like sm ghostlink" href="{{ url_for('export_registrations') }}" title="전체 등록 이력을 .log 파일로 저장">⬇ 로그 저장</a>
+      </div>
+      <form method="post" action="{{ url_for('delete_registrations') }}" id="reg-form">
+        {% if logs %}
+        <div class="bulkbar">
+          <label class="inline"><input type="checkbox" id="rg-all"> 전체 선택</label>
+          <span class="muted" id="rg-info"></span>
+          <button class="ghost tiny" name="scope" value="selected" id="rg-del" disabled
+                  onclick="return confirm('선택한 등록 이력을 지울까요?')">선택 삭제</button>
+          <button class="ghost tiny" name="scope" value="all"
+                  onclick="return confirm('등록 이력을 모두 지울까요? 지우기 전에 로그 저장을 권장합니다.\n(쿠팡에 등록된 상품은 지워지지 않습니다)')">모두 지우기</button>
+        </div>
+        {% endif %}
+        <table>
+          <tr><th class="c chk"></th><th>시간</th><th>상품명</th><th>결과</th></tr>
+          {% for l in logs %}<tr class="{{ '' if l.ok else 'danger' }}"><td class="c chk"><input type="checkbox" name="reg_id" value="{{ l.id }}" class="rg-chk" aria-label="선택"></td>
+            <td>{{ l.created_at[5:] }}</td><td>{{ l.name }}</td><td>{{ l.result }}</td></tr>
+          {% else %}<tr><td colspan="4" class="muted">아직 없음</td></tr>{% endfor %}
+        </table>
+      </form>
     </section>
   </div>
 </div>
@@ -405,4 +421,16 @@
 <script src="{{ url_for('static', filename='editor.js') }}"></script>
 <script src="{{ url_for('static', filename='category.js') }}"></script>
 <script src="{{ url_for('static', filename='register.js') }}"></script>
+<script>
+(() => {
+  const chks = [...document.querySelectorAll('.rg-chk')], all = document.getElementById('rg-all');
+  if (!all) return;
+  const del = document.getElementById('rg-del'), info = document.getElementById('rg-info');
+  const upd = () => { const n = chks.filter((c) => c.checked).length;
+    del.disabled = !n; del.textContent = n ? `선택 삭제 (${n})` : '선택 삭제'; info.textContent = n ? `${n}개 선택` : '';
+    all.checked = n === chks.length; };
+  chks.forEach((c) => c.addEventListener('change', upd));
+  all.addEventListener('change', () => { chks.forEach((c) => { c.checked = all.checked; }); upd(); });
+})();
+</script>
 {% endblock %}

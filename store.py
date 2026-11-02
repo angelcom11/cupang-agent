@@ -148,6 +148,23 @@ class Store:
     def registrations(self, limit: int = 50) -> list[dict]:
         return self._q("SELECT id,name,result,ok,created_at FROM registrations ORDER BY id DESC LIMIT ?", (limit,))
 
+    def all_registrations(self) -> list[dict]:
+        return self._q("SELECT * FROM registrations ORDER BY id")
+
+    def delete_registrations(self, ids: list[int] | None = None) -> int:
+        """ids 가 None 이면 전체 삭제. 지운 개수를 돌려준다."""
+        if ids is None:
+            n = self._q("SELECT COUNT(*) AS n FROM registrations")[0]["n"]
+            self._q("DELETE FROM registrations")
+            return n
+        ids = [int(i) for i in ids]
+        if not ids:
+            return 0
+        marks = ",".join("?" * len(ids))
+        n = self._q(f"SELECT COUNT(*) AS n FROM registrations WHERE id IN ({marks})", ids)[0]["n"]
+        self._q(f"DELETE FROM registrations WHERE id IN ({marks})", ids)
+        return n
+
     # drafts (상품 등록 임시저장)
     def save_draft(self, data: dict, draft_id: int | None = None, note: str | None = None) -> int:
         name = (data.get("display_name") or data.get("name") or "").strip() or "(이름 없음)"

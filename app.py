@@ -345,6 +345,34 @@ def delete_draft(draft_id):
     return redirect(url_for("register"))
 
 
+@app.route("/register/history/delete", methods=["POST"])
+def delete_registrations():
+    if request.form.get("scope") == "all":
+        n = store.delete_registrations(None)
+    else:
+        ids = [i for i in request.form.getlist("reg_id") if i.isdigit()]
+        if not ids:
+            flash("지울 등록 이력을 선택하세요", "danger")
+            return redirect(url_for("register") + "#reg-history")
+        n = store.delete_registrations(ids)
+    flash(f"등록 이력 {n}건을 지웠습니다", "info")
+    return redirect(url_for("register") + "#reg-history")
+
+
+@app.route("/register/history/export.log")
+def export_registrations():
+    """등록 이력 전체를 오래된 것부터. 실패 건은 원인 확인용으로 보낸 내용(JSON)도 함께 적는다."""
+    rows = store.all_registrations()
+    lines = [f"# WING 매니저 상품 등록 이력 · {datetime.now():%Y-%m-%d %H:%M:%S} 저장 · "
+             f"{'모의' if client.mode == 'mock' else '실연동'} 모드 · {len(rows)}건"]
+    for r in rows:
+        lines.append(f"{r['created_at']} [{'OK' if r['ok'] else 'FAIL'}] {r['name']} | {r['result']}")
+        if not r["ok"] and r["payload"]:
+            lines.append(f"    payload: {r['payload']}")
+    return Response("\n".join(lines) + "\n", mimetype="text/plain; charset=utf-8", headers={
+        "Content-Disposition": f"attachment; filename=wing-register-{datetime.now():%Y%m%d-%H%M%S}.log"})
+
+
 @app.route("/register/template.csv")
 def csv_template_download():
     return Response(csv_template(), mimetype="text/csv; charset=utf-8",
