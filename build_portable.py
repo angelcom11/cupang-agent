@@ -12,6 +12,7 @@ import platform
 import shutil
 import subprocess
 import sys
+import time
 import zipfile
 from pathlib import Path
 
@@ -45,7 +46,7 @@ def package(exe: Path) -> Path:
     out = ROOT / "dist" / f"{NAME}-{VERSION}-{target()}.zip"
     folder = f"{NAME}-{VERSION}"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
-        info = zipfile.ZipInfo(f"{folder}/{exe.name}")
+        info = zipfile.ZipInfo(f"{folder}/{exe.name}", date_time=time.localtime(exe.stat().st_mtime)[:6])
         info.external_attr = 0o755 << 16  # Linux·macOS 에서 압축을 풀어도 실행 권한 유지
         info.compress_type = zipfile.ZIP_DEFLATED
         z.writestr(info, exe.read_bytes())
