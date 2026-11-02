@@ -16,10 +16,21 @@
     <a href="{{ url_for('register') }}" class="{{ 'on' if ep=='register' }}">➕ 상품 등록</a>
     <a href="{{ url_for('settings') }}" class="{{ 'on' if ep=='settings' }}">⚙️ 설정</a>
   </nav>
-  <div class="status">
+  <div class="status" id="health">
+    <button type="button" class="hsum" id="h-toggle" aria-expanded="false" title="연결 상태 자세히">
+      <span class="hrow"><i class="dot ok" id="h-app-dot"></i><span id="h-app">프로그램 실행 중</span></span>
+      <span class="hrow"><i class="dot wait" id="h-cp-dot"></i><span id="h-cp">쿠팡 연결 확인 중…</span></span>
+    </button>
+    <div class="hdetail" id="h-detail">
+      <div class="hsub" id="h-app-sub">버전 · 실행 시간 확인 중</div>
+      <div class="hsub" id="h-cp-sub"></div>
+      <div class="hlabel">서버 접속 주소 <small>(누르면 복사)</small></div>
+      <ul class="haddr" id="h-addr"><li class="muted">{{ request.host }}</li></ul>
+      <div class="hsub" id="h-checked"></div>
+    </div>
     <span class="badge {{ 'live' if mode=='live' else 'mock' }}">{{ '실연동' if mode=='live' else '모의 모드' }}</span>
-    <div>마지막 동기화<br><b id="last-sync">{{ sync.last_sync or '-' }}</b></div>
-    {% if sync.last_error %}<div class="err">⚠ {{ sync.last_error }}</div>{% endif %}
+    <div class="hsync">마지막 동기화<br><b id="last-sync">{{ sync.last_sync or '-' }}</b></div>
+    <div class="err" id="sync-err" {{ '' if sync.last_error else 'hidden' }}>⚠ <span>{{ sync.last_error or '' }}</span></div>
     <button onclick="syncNow(this)">지금 동기화</button>
   </div>
 </aside>
@@ -32,6 +43,54 @@
 async function syncNow(btn){btn.disabled=true;btn.textContent='동기화 중…';
   await fetch('/api/sync',{method:'POST'});location.reload();}
 const won = n => n==null ? '-' : n.toLocaleString('ko-KR')+'원';
+// ===== 연결 상태: 10초마다 확인 (응답이 없으면 '프로그램 응답 없음') =====
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const setDot = (id, st) => { $(id).className = 'dot ' + st; };
+  let failCount = 0;
+  async function check(refresh) {
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 6000);
+    try {
+      const r = await fetch('/api/health' + (refresh ? '?refresh=1' : ''), { cache: 'no-store', signal: ctl.signal });
+      if (!r.ok) throw new Error(r.status);
+      const h = await r.json();
+      failCount = 0;
+      setDot('h-app-dot', 'ok'); $('h-app').textContent = '프로그램 실행 중';
+      $('h-app-sub').textContent = `v${h.version} · ${h.uptime}째 실행 (${h.started} 시작) · ${h.hostname}`;
+      const c = h.coupang;
+      setDot('h-cp-dot', c.state); $('h-cp').textContent = c.text;
+      $('h-cp-sub').textContent = [c.ip && `쿠팡 API ${c.ip}${c.ms != null ? ` · ${c.ms}ms` : ''}`, c.detail].filter(Boolean).join(' · ');
+      $('h-addr').replaceChildren(...h.addresses.map((a) => {
+        const li = document.createElement('li');
+        li.className = a.current ? 'cur' : '';
+        li.title = '눌러서 주소 복사';
+        li.innerHTML = '<b></b><small></small>';
+        li.firstChild.textContent = a.url.replace('http://', '');
+        li.lastChild.textContent = a.kind + (a.current ? ' · 지금 접속' : '');
+        li.onclick = () => navigator.clipboard?.writeText(a.url).then(() => { li.lastChild.textContent = '복사했습니다'; });
+        return li;
+      }));
+      $('last-sync').textContent = h.last_sync || '-';
+      $('sync-err').hidden = !h.sync_error; $('sync-err').querySelector('span').textContent = h.sync_error || '';
+      $('h-checked').textContent = '확인 ' + new Date().toLocaleTimeString('ko-KR');
+    } catch (e) {
+      failCount += 1;
+      if (failCount < 2) return;  // 한 번 놓친 건 넘어간다 (잠깐의 끊김)
+      setDot('h-app-dot', 'bad'); $('h-app').textContent = '프로그램 응답 없음';
+      $('h-app-sub').textContent = '프로그램이 꺼졌거나 서버와 네트워크가 끊겼습니다. 서버에서 다시 실행하세요.';
+      setDot('h-cp-dot', 'wait'); $('h-cp').textContent = '쿠팡 연결 알 수 없음'; $('h-cp-sub').textContent = '';
+      $('h-checked').textContent = '마지막 시도 ' + new Date().toLocaleTimeString('ko-KR');
+    } finally { clearTimeout(timer); }
+  }
+  $('h-toggle').onclick = () => {
+    const open = $('health').classList.toggle('open');
+    $('h-toggle').setAttribute('aria-expanded', open);
+    if (open) check(true);
+  };
+  check(false);
+  setInterval(() => { if (!document.hidden) check(false); }, 10000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) check(false); });
+})();
 addEventListener('load', () => { const a = document.querySelector('nav a.on'), n = a?.parentElement;
   if (a) n.scrollLeft = a.offsetLeft - n.offsetLeft - (n.clientWidth - a.offsetWidth) / 2; });
 </script>

@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import socket
 import time
 import uuid
 from datetime import datetime
@@ -20,6 +21,7 @@ from coupang_client import CoupangAPIError, CoupangClient
 from mock_backend import MockCompetitorProvider, MockCoupangClient
 from notifier import FREQUENCIES, TIME_RE, TOPICS, TelegramError, TelegramNotifier, find_chats
 from categories import CategoryError, CategoryStore, nodes_from_api_tree, nodes_from_file
+import health
 import product_form as pf
 import rocket_growth
 from product_form import build_product_payload, product_names, validate_form
@@ -601,6 +603,24 @@ def api_ping():  # 포터블 실행기가 '이미 실행 중'인지 확인하는
     return jsonify({"app": "wing-manager", "version": VERSION})
 
 
+@app.route("/api/health")
+def api_health():
+    """메뉴바 연결 상태. 응답이 온다는 것 자체가 '프로그램 실행 중'이다."""
+    from version import VERSION
+    probe = health.probe_coupang(force=request.args.get("refresh") == "1")
+    port = app.config.get("WING_PORT") or (int(request.host.rsplit(":", 1)[1]) if ":" in request.host else 80)
+    return jsonify({
+        "running": True, "version": VERSION, "uptime": health.uptime_text(),
+        "started": datetime.fromtimestamp(health.STARTED).strftime("%Y-%m-%d %H:%M"),
+        "mode": client.mode, "last_sync": sync.last_sync, "sync_error": sync.last_error,
+        "coupang": {**health.coupang_state(client.mode, sync.last_sync, sync.last_error,
+                                           int(cfg.get("sync_interval_sec", 30)), probe),
+                    "host": probe["host"], "ip": probe["ip"], "ms": probe["ms"]},
+        "addresses": health.addresses(app.config.get("WING_HOST", "0.0.0.0"), port, request.host),
+        "hostname": socket.gethostname(),
+    })
+
+
 @app.route("/api/sync", methods=["POST"])
 def api_sync():
     sync.run_once()
@@ -609,4 +629,5 @@ def api_sync():
 
 if __name__ == "__main__":
     sync.start()
-    app.run(host=cfg.get("host", "0.0.0.0"), port=int(cfg.get("port", 26118)), debug=False)
+    app.config.update(WING_HOST=cfg.get("host", "0.0.0.0"), WING_PORT=int(cfg.get("port", 26118)))
+    app.run(host=app.config["WING_HOST"], port=app.config["WING_PORT"], debug=False)

@@ -124,6 +124,7 @@ def main(argv=None):
     import app as wing  # noqa: E402  (WING_DATA_DIR 을 정한 뒤에 불러온다)
     from werkzeug.serving import make_server
 
+    wing.app.config.update(WING_HOST=host, WING_PORT=port)  # 메뉴바 '서버 주소' 표시용
     server = make_server(host, port, wing.app, threaded=True)
     print("=" * 60)
     print(f" 쿠팡 WING 매니저 {VERSION}  ({'실연동' if wing.client.mode == 'live' else '모의 모드'})")
