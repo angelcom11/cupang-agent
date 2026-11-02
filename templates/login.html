@@ -1,13 +1,18 @@
 {% set lp = login_page %}{% set preview = request.args.get('preview') %}
 <!doctype html>
-<html lang="ko">
+<html lang="ko" data-theme-pref="{{ theme }}" data-theme="{{ 'dark' if theme == 'dark' else 'light' }}">
 <head>
+<script>/* 화면 모드: 시스템 설정이면 기기 설정(다크/라이트)을 따라가고, 바뀌면 바로 반영 */
+(() => { const d = document.documentElement, q = matchMedia('(prefers-color-scheme: dark)');
+  const apply = () => { const p = d.dataset.themePref; d.dataset.theme = p === 'system' ? (q.matches ? 'dark' : 'light') : p; };
+  apply(); q.addEventListener('change', apply); })();</script>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ '계정 만들기' if mode == 'setup' else lp.title }} – {{ lp.brand }}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='dark.css') }}">
 <style>
   body.loginpage{--accent:{{ lp.accent }};--accent-ink:{{ lp.accent }};--accent-ring:{{ lp.accent }}33;
-    background:{{ lp.bg_color }}{% if lp.bg_type == 'image' and lp.layout == 'center' %} url("{{ url_for('uploaded', name=lp.bg_image) }}") center/cover no-repeat fixed{% endif %}}
+    {% if lp.bg_color != '#f4f5f7' %}background:{{ lp.bg_color }}{% else %}background:var(--bg){% endif %}{% if lp.bg_type == 'image' and lp.layout == 'center' %} url("{{ url_for('uploaded', name=lp.bg_image) }}") center/cover no-repeat fixed{% endif %}}
   {% if lp.layout == 'split' %}.loginart{background:url("{{ url_for('uploaded', name=lp.bg_image) }}") center/cover no-repeat}{% endif %}
 </style>
 </head>

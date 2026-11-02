@@ -1,6 +1,18 @@
 {% extends 'base.html' %}
 {% block heading %}설정{% endblock %}
 {% block content %}
+<section class="card themecard" id="theme">
+  <form method="post" class="themeform">
+    <h2>화면 모드</h2>
+    <div class="wradio" role="radiogroup" aria-label="화면 모드">
+      {% for key, label in themes.items() %}
+      <label><input type="radio" name="theme" value="{{ key }}" {{ 'checked' if theme == key }}><span>{{ label }}</span></label>
+      {% endfor %}
+    </div>
+    <button name="action" value="save_theme">저장</button>
+    <span class="muted">고르면 바로 미리 보이고, 저장하면 모든 화면과 로그인 화면에 적용됩니다.</span>
+  </form>
+</section>
 <div class="grid2">
   <section class="card">
     <h2>쿠팡 Open API 키</h2>
@@ -214,6 +226,12 @@
 </section>
 {% endblock %}
 {% block scripts %}
+<script>
+document.querySelectorAll('input[name=theme]').forEach((r) => r.addEventListener('change', () => {
+  const d = document.documentElement; d.dataset.themePref = r.value;
+  d.dataset.theme = r.value === 'system' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : r.value;
+}));
+</script>
 <script>
 (() => {
   const f = document.getElementById('lp-form');

@@ -80,7 +80,11 @@ app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
 
 @app.context_processor
 def inject_globals():
-    return {"mode": client.mode, "sync": sync, "cfg": cfg, "login_page": login_page.get(cfg)}
+    return {"mode": client.mode, "sync": sync, "cfg": cfg, "login_page": login_page.get(cfg),
+            "theme": cfg.get("theme") if cfg.get("theme") in THEMES else "system"}
+
+
+THEMES = {"system": "시스템 설정 따르기", "light": "라이트 모드", "dark": "다크 모드"}
 
 
 def _price_rows():
@@ -516,6 +520,15 @@ def settings():
                        auto_soldout=bool(request.form.get("auto_soldout")), public_base_url=base)
             save_config(cfg)
             flash("자동화 설정을 저장했습니다", "info")
+        elif action == "save_theme":
+            theme = request.form.get("theme")
+            if theme not in THEMES:
+                flash("화면 모드를 다시 고르세요", "danger")
+            else:
+                cfg["theme"] = theme
+                save_config(cfg)
+                flash(f"화면 모드: {THEMES[theme]}", "info")
+            return redirect(url_for("settings"))
         elif action == "save_login_page":
             lp, errors = login_page.from_form(request.form, login_page.get(cfg))
             if errors:  # 오류 안내는 화면 맨 위에 나오므로 섹션으로 내려가지 않는다
@@ -541,7 +554,7 @@ def settings():
                            tg_last=notifier.last_result, freqs=FREQUENCIES, tg_pending=notifier.pending_count,
                            tg_next=notifier.upcoming_flush, tg_window_open=notifier.window_open(),
                            mock_competitor_live=sync.competitor_is_mock_on_live,
-                           layouts=login_page.LAYOUTS)
+                           layouts=login_page.LAYOUTS, themes=THEMES)
 
 
 session_chats: dict = {}  # '대화 찾기' 결과를 다음 화면 한 번에만 보여 주기 위한 임시 보관
