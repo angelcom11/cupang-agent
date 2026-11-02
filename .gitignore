@@ -12,3 +12,8 @@ __pycache__/
 .pytest_cache/
 *.log
 .DS_Store
+
+# 포터블 빌드 결과
+build/
+dist/
+*.spec

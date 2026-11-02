@@ -11,6 +11,18 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 실연동: **설정** 화면에서 업체코드·Access Key·Secret Key 입력 → 연결 테스트 → 저장 (config.json, 권한 600).
 출고지·반품지 코드는 `config.example.json` 의 `product_defaults` 참고.
 
+
+## 포터블 버전 (Windows · macOS · Linux)
+설치 없이 실행 파일 하나로 쓰는 버전입니다. **GitHub Releases** 에서 내 컴퓨터에 맞는 zip을 받으세요.
+사용법은 [PORTABLE.md](PORTABLE.md) 에 있습니다.
+
+- 데이터는 실행 파일 옆 `WING-data/` 폴더에 저장됩니다 (`config.json` · `wing.db` · `uploads/`).
+- 기본은 이 컴퓨터에서만 접속(127.0.0.1). `--lan` 을 붙이면 같은 네트워크의 휴대폰에서도 접속할 수 있습니다.
+- 새 버전 배포: `version.py` 의 VERSION 을 올리고 `git tag vX.Y.Z && git push origin vX.Y.Z`
+  → GitHub Actions(`.github/workflows/portable.yml`)가 5종(windows-x64, macos-arm64, macos-x64, linux-x64, linux-arm64)을
+  빌드·실행 확인한 뒤 Releases 에 올립니다.
+- 직접 빌드: `pip install pyinstaller && python build_portable.py` (지금 OS용만 만들어집니다).
+
 ## 자동화
 - 재고 자동 읽기: 설정한 주기(기본 30초)마다 쿠팡 재고를 읽고 재고 화면이 자동 갱신
 - 자동 품절: 재고가 기준(기본 5개) **미만**이면 판매중지, 재입고되면 자동 판매재개 (수동 중지 상품은 제외)

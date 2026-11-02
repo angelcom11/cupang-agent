@@ -1,0 +1,74 @@
+# 포터블 실행 파일 자동 빌드: Windows · Linux · macOS
+# - 태그(v*)를 올리면: 테스트 → 각 OS에서 빌드 → 실행 확인 → GitHub Releases 에 zip 업로드
+# - Actions 탭에서 수동 실행(workflow_dispatch)하면: 빌드 결과를 Artifacts 로만 받음
+name: portable
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, name: windows-x64 }
+          - { os: ubuntu-22.04, name: linux-x64 }        # glibc 2.35: 오래된 리눅스에서도 실행되도록 낮은 버전에서 빌드
+          - { os: ubuntu-22.04-arm, name: linux-arm64 }
+          - { os: macos-14, name: macos-arm64 }          # M1~M4
+          - { os: macos-15-intel, name: macos-x64 }      # 인텔 Mac
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 설치
+        run: python -m pip install -r requirements.txt "pyinstaller>=6.10,<7" "pytest>=8,<9"
+      - name: 테스트
+        run: python -m pytest -q test_*.py
+      - name: 빌드
+        run: python build_portable.py
+      - name: 실행 확인 (서버가 뜨고 화면이 열리는지)
+        run: |
+          exe=dist/bin/WING-Manager; [ -f "$exe.exe" ] && exe="$exe.exe"
+          "$exe" --version
+          "$exe" --no-browser --port 26150 --data "$RUNNER_TEMP/wing-data" > run.log 2>&1 &
+          for i in $(seq 1 40); do curl -sf http://127.0.0.1:26150/api/ping && break; sleep 1; done
+          echo; cat run.log
+          for u in / /inventory /prices /register /settings /static/register.js; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:26150$u"); echo "$code $u"; [ "$code" = 200 ]
+          done
+          kill %1 || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WING-Manager-${{ matrix.name }}
+          path: dist/*.zip
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - name: GitHub Releases 에 올리기
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -la out
+          gh release create "$GITHUB_REF_NAME" out/*.zip --repo "$GITHUB_REPOSITORY" \
+            --title "WING 매니저 $GITHUB_REF_NAME (포터블)" \
+            --notes "설치 없이 실행 파일 하나로 쓰는 버전입니다. 내 컴퓨터에 맞는 zip을 받아 압축을 풀고 실행하세요. 자세한 사용법은 zip 안의 사용법.md 를 보세요." \
+          || gh release upload "$GITHUB_REF_NAME" out/*.zip --repo "$GITHUB_REPOSITORY" --clobber

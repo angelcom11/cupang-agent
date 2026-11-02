@@ -595,6 +595,12 @@ def api_inventory():
     return jsonify({"last_sync": sync.last_sync, "error": sync.last_error, "items": store.items()})
 
 
+@app.route("/api/ping")
+def api_ping():  # 포터블 실행기가 '이미 실행 중'인지 확인하는 용도
+    from version import VERSION
+    return jsonify({"app": "wing-manager", "version": VERSION})
+
+
 @app.route("/api/sync", methods=["POST"])
 def api_sync():
     sync.run_once()
