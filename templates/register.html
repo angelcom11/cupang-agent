@@ -11,9 +11,11 @@
       <div class="wlabel{{ ' req' if req }}">{{ label }}{% if hint %}<small>{{ hint }}</small>{% endif %}</div>
       <div class="wfield">{{ caller() }}</div></div>{% endmacro %}
     {% macro radios(name, options, value, id='') %}<div class="wradio"{% if id %} id="{{ id }}"{% endif %}>{% for k, v in options %}<label><input type="radio" name="{{ name }}" value="{{ k }}" {{ 'checked' if (value or '') == k }}><span>{{ v }}</span></label>{% endfor %}</div>{% endmacro %}
-    <div class="sellmode"><span class="wlabel-inline">판매방식</span>
-      <label class="on"><input type="radio" checked disabled> 판매자배송</label>
-      <label class="off" title="로켓그로스는 입고·물류 정보가 필요해 이 프로그램에서는 지원하지 않습니다"><input type="radio" disabled> 로켓그로스 <small>(미지원)</small></label>
+    <div class="sellmode" id="sellmode">
+      <span class="wlabel-inline req">판매방식</span>
+      <label class="wcheck"><input type="checkbox" name="sell_seller" value="1" form="reg-form" {{ 'checked' if f.sell_seller }}><span>판매자배송</span></label>
+      <label class="wcheck"><input type="checkbox" name="sell_rocket" value="1" form="reg-form" {{ 'checked' if f.sell_rocket }}><span>로켓그로스</span></label>
+      <span class="muted">둘 다 고르면 판매자배송과 로켓그로스를 함께 운영합니다.</span>
     </div>
     <ol class="stepper" id="stepper">
       {% for sid, label in pf.STEPS %}<li><button type="button" data-go="{{ sid }}" title="{{ loop.index }}. {{ label }}" class="{{ 'err' if sid in error_steps }}"><b>{{ loop.index }}</b><span>{{ label }}</span></button></li>{% endfor %}
@@ -22,6 +24,7 @@
     <form method="post" class="form wing" id="reg-form" data-resume="{{ 1 if resume else 0 }}" data-sub="{{ start_sub }}">
       {% if draft_id %}<input type="hidden" name="draft_id" value="{{ draft_id }}">{% endif %}
       <input type="hidden" name="step" id="cur-step" value="{{ start_step }}">
+      <input type="hidden" name="has_sell_mode" value="1">
       {% for k in pf.JSON_KEYS %}<input type="hidden" name="{{ k }}" id="j-{{ k }}">{% endfor %}
       <input type="hidden" name="search_tags" id="search-tags" value="{{ f.get('search_tags','') }}">
       <input type="hidden" name="detail_mode" id="detail-mode" value="{{ f.detail_mode or 'editor' }}">
@@ -285,6 +288,42 @@
           <span class="muted">· 고객 사유 반품 시 왕복배송비(초도 + 반품)가 고객에게 청구됩니다.</span></div>{% endcall %}
         <label class="inline long"><input type="checkbox" name="remember_defaults"> 배송·반품 설정을 다음 상품에도 기본값으로 쓰기
           {% if has_saved_defaults %}<span class="muted">(저장된 기본값 사용 중)</span>{% endif %}</label>
+      </fieldset>
+
+      <fieldset class="sec" id="s-rg"><legend>로켓그로스 물류 입고 정보</legend>
+        <p class="muted">쿠팡 창고에 입고해서 쿠팡이 배송하는 상품입니다. 먼저 WING &gt; 판매자정보 &gt; 추가판매정보에서
+          <b>'로켓그로스 상품 생성 API 이용 및 검수 기준 동의'</b>를 해야 등록됩니다.</p>
+        {% call row('바코드', True) %}
+          {{ radios('rg_barcode_mode', [('auto', '쿠팡 바코드 사용'), ('own', '내 바코드 사용')], f.rg_barcode_mode or 'auto') }}
+          <p class="muted" id="rg-barcode-auto">쿠팡이 바코드를 만들어 줍니다. 출력해서 상품에 붙여 입고하세요.</p>
+          <p class="muted" id="rg-barcode-own" hidden>옵션 단계의 <b>바코드</b> 칸에 상품에 붙은 표준 바코드(8·12·13·14·18자리, 영문 대문자·숫자)를 옵션마다 입력하세요.</p>
+        {% endcall %}
+        {% call row('입고 정보', True) %}
+          {{ radios('rg_inbound', [('later', '나중에 입력'), ('now', '지금 입력')], f.rg_inbound or 'later') }}
+          <p class="muted">나중에 입력하면 WING에서 입고를 만들 때 크기·무게를 넣습니다.</p>
+        {% endcall %}
+        <div id="rg-now">
+          {% call row('물류 입고용 상품명', True) %}<input name="rg_inbound_name" value="{{ f.get('rg_inbound_name','') }}" maxlength="100" placeholder="비우면 노출상품명으로 채웁니다" class="mid">{% endcall %}
+          {% call row('상품 크기', True, hint='포장 포함, mm') %}
+            <div class="inlinefields">가로 <input type="text" inputmode="numeric" name="rg_width" value="{{ f.rg_width }}" class="short">
+              × 세로 <input type="text" inputmode="numeric" name="rg_length" value="{{ f.rg_length }}" class="short">
+              × 높이 <input type="text" inputmode="numeric" name="rg_height" value="{{ f.rg_height }}" class="short"> mm</div>
+          {% endcall %}
+          {% call row('무게', True, hint='g') %}
+            <div class="inlinefields">무게 <input type="text" inputmode="numeric" name="rg_weight" value="{{ f.rg_weight }}" class="short"> g
+              · 순중량 <input type="text" inputmode="numeric" name="rg_net_weight" value="{{ f.rg_net_weight }}" class="short"> g</div>
+          {% endcall %}
+          {% call row('소비기한', hint='일 · 없으면 0', id='rg-expiry-row') %}
+            <div class="inlinefields"><input type="text" inputmode="numeric" name="rg_expiry_days" value="{{ f.rg_expiry_days }}" class="short"> 일
+              <span class="muted" id="rg-expiry-note"></span></div>
+          {% endcall %}
+          {% call row('취급주의', True) %}{{ radios('rg_fragile', [('N', '아니오'), ('Y', '예 (깨지기 쉬움)')], f.rg_fragile or 'N') }}{% endcall %}
+          <p class="muted rg-foot">입수량은 로켓그로스 규정에 따라 1로 등록됩니다. 크기·무게는 모든 옵션에 똑같이 적용됩니다.</p>
+        </div>
+        {% call row('검수 기준 동의', True) %}
+          <label class="inline long"><input type="checkbox" name="rg_agree" value="1" {{ 'checked' if f.rg_agree }}>
+            로켓그로스 판매 불가 상품이 아님을 확인했고, 로켓그로스 상품 검수 기준에 동의합니다</label>
+        {% endcall %}
       </fieldset>
 
       <fieldset class="sec" id="s-docs"><legend>구비서류</legend>

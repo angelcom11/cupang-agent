@@ -21,6 +21,7 @@ from mock_backend import MockCompetitorProvider, MockCoupangClient
 from notifier import FREQUENCIES, TIME_RE, TOPICS, TelegramError, TelegramNotifier, find_chats
 from categories import CategoryError, CategoryStore, nodes_from_api_tree, nodes_from_file
 import product_form as pf
+import rocket_growth
 from product_form import build_product_payload, product_names, validate_form
 from services import (CSV_COLUMNS, CSV_HEADERS, DOC_MAX_MB, SyncService, clean_html, csv_template, detect_document,
                       detect_image, parse_csv)
@@ -251,6 +252,9 @@ def _form_data() -> dict:
     for key in pf.JSON_KEYS:
         data[key] = request.form.get(key, "")
     data["parallel_imported"] = "1" if request.form.get("parallel_imported") else ""
+    if request.form.get("has_sell_mode"):  # 판매방식 칸이 있는 화면에서 온 요청: 체크 해제 = 폼에 없음 = '꺼짐'
+        for key in rocket_growth.CHECKBOX_KEYS:
+            data[key] = "1" if request.form.get(key) else ""
     data["description_html"] = clean_html(request.form.get("description_html", ""))
     data["request_approval"] = "1" if request.form.get("request_approval") else ""
     return pf.normalize_form(data, pf.defaults_from_config(cfg))

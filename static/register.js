@@ -31,6 +31,7 @@
     return radios(n).find((r) => r.checked)?.closest('label').textContent.trim() || '';
   };
   const show = (node, on) => { node.hidden = !on; };
+  const sellOn = () => form.elements.sell_seller.checked, rocketOn = () => form.elements.sell_rocket.checked;
 
   // ================= 옵션 =================
   const newOption = (values = {}) => ({ values, name: '', original_price: '', sale_price: '', stock: '', sku: '', model_no: '', barcode: '' });
@@ -136,8 +137,11 @@
     const all = el('input', { type: 'checkbox', title: '전체 선택' });
     all.addEventListener('change', () => t.querySelectorAll('tbody .osel').forEach((c) => { c.checked = all.checked; }));
     const nameCols = multi ? (ts.length ? ts : ['옵션명']) : [];
+    const ownBarcode = rocketOn() && val('rg_barcode_mode') === 'own';
+    const cols = COLS.filter(([k]) => k !== 'stock' || sellOn())  // 로켓그로스만이면 재고는 입고 수량으로 정해짐
+      .map(([k, label, mode]) => [k, k === 'barcode' && ownBarcode ? '바코드 *' : label, mode]);
     const head = el('tr', {}, ...(multi ? [el('th', {}, all)] : []), ...nameCols.map((n) => el('th', { textContent: n })),
-      ...COLS.map(([, label]) => el('th', { textContent: label })), ...(multi ? [el('th')] : []));
+      ...cols.map(([, label]) => el('th', { textContent: label })), ...(multi ? [el('th')] : []));
     const body = el('tbody');
     S.options.forEach((o, i) => {
       const tr = el('tr');
@@ -156,7 +160,7 @@
         }
       }
       const disc = el('span', { className: 'disc', textContent: discountOf(o) });
-      COLS.forEach(([k, label, mode]) => {
+      cols.forEach(([k, label, mode]) => {
         if (k === 'discount') { tr.append(el('td', { dataset: { label } }, disc)); return; }
         const inp = el('input', { value: o[k] || '', inputMode: mode || 'text' });
         inp.addEventListener('input', () => { o[k] = inp.value.trim(); disc.textContent = discountOf(o); });
@@ -209,6 +213,7 @@
     renderMeta();
   }
   function renderMeta() {
+    if (form.elements.rg_inbound) syncRocket();
     const dl = $('attr-names') || document.body.appendChild(el('datalist', { id: 'attr-names' }));
     dl.replaceChildren(...(meta?.attributes || []).filter((a) => a.exposed === 'EXPOSED').map((a) => el('option', { value: a.attributeTypeName })));
     renderTypes(); renderFilters(); renderCerts(); renderNoticeCats(); renderDocs(); renderOffer();
@@ -500,10 +505,23 @@
   }
   $('detail-tabs').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { setDetailMode(b.dataset.mode); dirty(); }));
 
+  // ================= 로켓그로스 =================
+  function syncRocket() {  // 함수 선언: 카테고리 정보가 늦게 와도(renderMeta) 부를 수 있게
+    show($('rg-now'), val('rg_inbound') === 'now');
+    show($('rg-barcode-auto'), val('rg_barcode_mode') !== 'own');
+    show($('rg-barcode-own'), val('rg_barcode_mode') === 'own');
+    const need = !!meta?.isExpirationDateRequiredForRocketGrowth;
+    $('rg-expiry-row').querySelector('.wlabel').classList.toggle('req', need);
+    $('rg-expiry-note').textContent = need ? '이 카테고리는 소비기한이 필수입니다' : '소비기한이 없는 상품은 0';
+    renderTable();
+  }
+  onRadio('rg_inbound', syncRocket); onRadio('rg_barcode_mode', syncRocket);
+
   // ================= 저장 =================
   form.addEventListener('submit', () => {
     if (optMode === 'multi' && types.some((t) => t.name) && types.filter((t) => t.name).map((t) => t.name).join() !== S.option_types.join()) buildOptions();
     if (tagInput.value.trim()) addTags(tagInput.value);
+    if (rocketOn() && val('rg_inbound') === 'now' && !val('rg_inbound_name')) form.elements.rg_inbound_name.value = val('display_name');
     if (val('maxbuy_mode') === 'off') form.elements.max_per_person.value = '0';
     if (val('period_mode') === 'off') { form.elements.sale_start.value = ''; form.elements.sale_end.value = '2099-01-01T23:59'; }
     const keep = S.options.filter((o) => Object.values(o.values).some(Boolean) || o.name || o.sale_price || o.original_price || o.stock);
@@ -557,8 +575,40 @@
         .map(([n, l]) => !val(n) && `${l}을(를) 입력하세요`) : []),
       ...['delivery_charge_on_return', 'return_charge'].map((n) => !isNum(val(n)) && '반품 배송비는 숫자로 입력하세요')],
     's-docs': () => requiredDocs().filter((n) => !S.docs[n]).map((n) => `구비서류 '${n}'을(를) 등록하세요`),
+    's-rg': () => {
+      const out = [!form.elements.rg_agree.checked && '로켓그로스 상품 검수 기준에 동의해야 합니다'];
+      if (val('rg_barcode_mode') === 'own') {
+        S.options.forEach((o, i) => {
+          const b = String(o.barcode || '').trim(), label = optionLabel(o) || `${i + 1}번째 옵션`;
+          if (!b) out.push(`'${label}' 바코드를 옵션 단계에 입력하거나 '쿠팡 바코드 사용'을 고르세요`);
+          else if (!/^[A-Z0-9-]+$/.test(b) || ![8, 12, 13, 14, 18].includes(b.replace(/-/g, '').length)) out.push(`'${label}' 바코드는 8·12·13·14·18자리 영문 대문자·숫자여야 합니다`);
+        });
+      }
+      if (val('rg_inbound') === 'now') {
+        [['rg_width', '가로'], ['rg_length', '세로'], ['rg_height', '높이'], ['rg_weight', '무게'], ['rg_net_weight', '순중량']]
+          .forEach(([n, l]) => { if (!(money(val(n)) > 0)) out.push(`${l} 값을 1 이상의 숫자로 입력하세요`); });
+        if (money(val('rg_net_weight')) > money(val('rg_weight')) && money(val('rg_weight')) > 0) out.push('순중량은 무게보다 클 수 없습니다');
+        if (!isNum(val('rg_expiry_days') || '0')) out.push('소비기한은 숫자로 입력하세요');
+        else if (meta?.isExpirationDateRequiredForRocketGrowth && !(money(val('rg_expiry_days')) > 0)) out.push('이 카테고리는 소비기한(일)이 필수입니다');
+      }
+      return out;
+    },
     's-confirm': () => [!val('vendor_user_id') && 'WING 아이디를 입력하세요'],
   };
+  // 판매방식에 따라 쓰는 단계: 배송·반품/교환 = 판매자배송, 로켓그로스 입고 정보 = 로켓그로스
+  const STEP_NEEDS = { 's-ship': sellOn, 's-return': sellOn, 's-rg': rocketOn };
+  const active = (k) => (STEP_NEEDS[steps[k].id] || (() => true))();
+  const nextActive = (k, dir) => { let j = k + dir; while (j >= 0 && j < steps.length && !active(j)) j += dir; return j; };
+  function syncSteps() {
+    let n = 0;
+    stepBtns.forEach((b, k) => {
+      const on = active(k);
+      b.closest('li').hidden = !on;
+      if (on) { n += 1; b.querySelector('b').textContent = n; b.title = `${n}. ${b.querySelector('span').textContent}`; }
+    });
+    if (!active(cur)) showStep(Math.max(0, nextActive(cur, -1)));
+    else { updateButtons(); paintSteps(); }
+  }
   const SUBCHECK = [
     () => [!brandNone.checked && !val('brand') && "브랜드를 입력하거나 '브랜드 없음'을 체크하세요"],
     () => {
@@ -603,14 +653,15 @@
     curInput.value = steps[i].id;
     if (steps[i].id === 's-main') showSub(s);
     if (steps[i].id === 's-confirm') renderSummary();
-    $('step-progress').style.width = `${((i + 1) / steps.length) * 100}%`;
+    const on = steps.map((_, k) => k).filter(active);
+    $('step-progress').style.width = `${((on.indexOf(i) + 1) / on.length) * 100}%`;
     const box = steps[i].querySelector('.stepmsg'); if (box) box.hidden = true;
     stepBtns[i].scrollIntoView({ block: 'nearest', inline: 'center' });
     updateButtons();
   }
   function updateButtons() {
     const last = cur === steps.length - 1, inMain = steps[cur].id === 's-main';
-    $('btn-prev').disabled = cur === 0;
+    $('btn-prev').disabled = nextActive(cur, -1) < 0;
     $('btn-next').hidden = last;
     $('btn-next').textContent = inMain && sub < subs.length - 1 ? `다음 (${sub + 1}/${subs.length}) →` : '다음 →';
     ['btn-preview', 'btn-save', 'btn-submit'].forEach((id) => { $(id).hidden = !last; });
@@ -626,14 +677,16 @@
     if (!checkCurrent()) return;
     if (steps[cur].id === 's-main' && sub < subs.length - 1) { showSub(sub + 1); jumpTop(); return; }
     stepBtns[cur].classList.remove('err');
-    showStep(cur + 1); jumpTop();
+    showStep(nextActive(cur, 1)); jumpTop();
   }
   function prev() {
     if (steps[cur].id === 's-main' && sub > 0) { showSub(sub - 1); jumpTop(); return; }
-    if (cur > 0) { const p = cur - 1; showStep(p, steps[p].id === 's-main' ? subs.length - 1 : 0); jumpTop(); }
+    const p = nextActive(cur, -1);
+    if (p >= 0) { showStep(p, steps[p].id === 's-main' ? subs.length - 1 : 0); jumpTop(); }
   }
   function stepOk(k) {
     const id = steps[k].id;
+    if (!active(k)) return true;
     if (id === 's-confirm') return !CHECK['s-confirm']().filter(Boolean).length && steps.every((_, j) => j === k || stepOk(j));
     if ((id === 's-notice' || id === 's-docs' || id === 's-filter') && !meta) return false;  // 카테고리를 골라야 알 수 있음
     if (id === 's-main') return SUBCHECK.every((_, j) => subOk(j));
@@ -674,6 +727,7 @@
     const detail = { images: `이미지 ${S.content_images.length}장`, html: 'HTML 작성' }[val('detail_mode')]
       || ($('editor').textContent.trim() || $('editor').querySelector('img') ? '에디터 작성' : '');
     const rows = [
+      ['판매방식', [sellOn() && '판매자배송', rocketOn() && '로켓그로스'].filter(Boolean).join(' + '), 's-name'],
       ['노출상품명', val('display_name'), 's-name'], ['등록상품명', val('name') || '(노출상품명과 같음)', 's-name'],
       ['카테고리', $('cat-selected').textContent.trim(), 's-cat'],
       ['옵션', (optMode === 'single' ? '단일 상품' : `옵션 ${S.options.length}개`) + (prices.length ? ` · ${won(lo)}${hi !== lo ? ` ~ ${won(hi)}` : ''}` : '') +
@@ -686,11 +740,15 @@
       ['상품정보제공고시', noticeSel.value, 's-notice'],
       ['배송', `${choiceText('delivery_method')} · ${choiceText('delivery_company')} · ${choiceText('delivery_charge_type')}` +
         (val('delivery_charge_type') !== 'FREE' ? ` ${won(money(val('delivery_charge')))}` : '') + ` · 출고 ${val('outbound_days')}일`, 's-ship'],
-      ['출고지', outSel.value ? choiceText('outbound_place_code') : '', 's-ship'],
+      ['출고지', !sellOn() ? '(로켓그로스: 쿠팡 배송)' : (outSel.value ? choiceText('outbound_place_code') : ''), 's-ship'],
       ['반품/교환지', val('return_mode') === 'direct' ? `직접 입력: ${val('return_zip')} ${val('return_addr')} ${val('return_addr_detail')}`.trim() : (retSel.value ? choiceText('return_center_code') : ''), 's-return'],
       ['구비서류', Object.keys(S.docs).filter((k) => S.docs[k]).join(', ') || '없음', 's-docs'],
+      ...(rocketOn() ? [['로켓그로스', [val('rg_barcode_mode') === 'own' ? '내 바코드' : '쿠팡 바코드',
+        val('rg_inbound') === 'now' ? `입고 정보 ${val('rg_width')}×${val('rg_length')}×${val('rg_height')}mm · ${val('rg_weight')}g` : '입고 정보 나중에',
+        form.elements.rg_agree.checked ? '검수 기준 동의함' : ''].filter(Boolean).join(' · ') + (form.elements.rg_agree.checked ? '' : ' (동의 필요)'), 's-rg']] : []),
     ];
-    $('summary').replaceChildren(...rows.flatMap(([k, v, sid]) => {
+    const usable = rows.filter(([, , sid]) => active(steps.findIndex((f) => f.id === sid)));
+    $('summary').replaceChildren(...usable.flatMap(([k, v, sid]) => {
       const edit = el('button', { type: 'button', className: 'ghost tiny', textContent: '수정' });
       edit.addEventListener('click', () => go(steps.findIndex((f) => f.id === sid)));
       return [el('dt', { textContent: k }), el('dd', { textContent: v || '⚠ 입력 안 됨', className: v ? '' : 'missing' }), el('dd', { className: 'act' }, edit)];
@@ -703,7 +761,13 @@
   setOptMode(optMode); renderGallery(); renderContent(); renderTags(); syncBrand();
   syncCharge(); syncMethod(); syncLimits(); renderOffer(); renderCerts();
   setDetailMode(modeInput.value || 'editor');
+  ['sell_seller', 'sell_rocket'].forEach((n) => form.elements[n].addEventListener('change', (e) => {
+    if (!sellOn() && !rocketOn()) e.target.checked = true;  // 판매방식은 하나 이상
+    syncRocket(); syncSteps(); dirty();
+  }));
   form.classList.add('wiz-on');
+  if (!active(cur)) cur = Math.max(0, nextActive(cur, -1));
   showStep(cur, Number(form.dataset.sub) || 0);
+  syncSteps(); syncRocket();
   loadMeta(code.value); loadPlaces();
 })();

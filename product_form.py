@@ -8,6 +8,8 @@ from __future__ import annotations
 import json
 import re
 from html import escape
+
+import rocket_growth as rg
 from datetime import datetime
 
 # ---------------- 선택지 (쿠팡 문서의 값) ----------------
@@ -33,10 +35,12 @@ FORM_DEFAULTS = {
     "outbound_place_code": "", "extra_info_message": "", "detail_mode": "editor",
     "return_center_code": "", "return_name": "", "return_phone": "", "return_zip": "", "return_addr": "",
     "return_addr_detail": "", "delivery_charge_on_return": "2500", "return_charge": "2500",
+    **rg.FORM_DEFAULTS,
 }
 # '이 배송·반품 설정을 기본값으로 저장'에서 기억하는 항목
 REMEMBER_KEYS = [k for k in FORM_DEFAULTS if k not in ("certification_type", "certification_code", "sale_start",
-                                                       "extra_info_message", "offer_condition", "detail_mode")]
+                                                       "extra_info_message", "offer_condition", "detail_mode")
+                 and (not k.startswith(("rg_", "sell_")) or k in rg.REMEMBER_KEYS)]
 # 예전 config.json product_defaults(API 이름) → 폼 이름
 LEGACY_DEFAULT_KEYS = {"deliveryCompanyCode": "delivery_company", "outboundShippingPlaceCode": "outbound_place_code",
                        "returnCenterCode": "return_center_code", "returnChargeName": "return_name",
@@ -49,13 +53,13 @@ MAX_OPTIONS = 200
 # 단건등록 작성 단계 — 쿠팡 WING 상품등록 화면 순서 (판매자 가이드 Step 1~14)
 STEPS = [("s-name", "노출상품명"), ("s-cat", "카테고리"), ("s-option", "옵션"), ("s-image", "상품이미지"),
          ("s-detail", "상세설명"), ("s-main", "주요정보"), ("s-keyword", "검색어"), ("s-filter", "검색필터"),
-         ("s-notice", "제공고시"), ("s-ship", "배송"), ("s-return", "반품/교환"), ("s-docs", "구비서류"),
+         ("s-notice", "제공고시"), ("s-ship", "배송"), ("s-return", "반품/교환"), ("s-rg", "로켓그로스"), ("s-docs", "구비서류"),
          ("s-confirm", "판매요청")]
 STEP_IDS = [k for k, _ in STEPS]
 # 상품 주요정보 안의 작은 단계 (WING 항목 순서)
 MAIN_SUBS = ["브랜드·제조사", "인증정보", "판매 조건", "구매수량·판매기간"]
 # 오류 문구 → 고칠 단계/작은 단계 (위에서부터 처음 맞는 규칙, 없으면 옵션)
-_ERROR_STEPS = [("카테고리 정보", "s-cat", 0), ("반품", "s-return", 0), ("제공고시", "s-notice", 0),
+_ERROR_STEPS = [("로켓그로스", "s-rg", 0), ("판매방식", "s-name", 0), ("카테고리 정보", "s-cat", 0), ("반품", "s-return", 0), ("제공고시", "s-notice", 0),
                 ("구비서류", "s-docs", 0), ("인증", "s-main", 1), ("상품 상태", "s-main", 2),
                 ("' 상품을 등록할 수 없습니다", "s-main", 2), ("판매 종료", "s-main", 3), ("판매 기간", "s-main", 3),
                 ("구매수량", "s-main", 3), ("이미지", "s-image", 0), ("출고", "s-ship", 0), ("배송", "s-ship", 0),
@@ -123,8 +127,10 @@ def normalize_form(form: dict, defaults: dict | None = None) -> dict:
     if f.get("detail_mode") == "images" and f["content_images"]:
         f["description_html"] = "".join(f'<div style="text-align:center"><img src="{escape(u)}" alt=""></div>'
                                         for u in f["content_images"] if u)
+    if rg.rocket_on(f) and f.get("rg_inbound") == "now" and not str(f.get("rg_inbound_name") or "").strip():
+        f["rg_inbound_name"] = product_names(f)[0]  # 물류 입고용 상품명을 비우면 노출상품명
     # WING: 해외구매대행은 배송방법 '구매대행'으로 정한다 (별도 체크 없음)
-    f["overseas_purchased"] = "1" if f.get("delivery_method") == "AGENT_BUY" else ""
+    f["overseas_purchased"] = "1" if rg.seller_on(f) and f.get("delivery_method") == "AGENT_BUY" else ""
     f["option_types"] = [t.strip() for t in f["option_types"] if str(t).strip()][:3]
     for o in f["options"]:
         o.setdefault("values", {})
@@ -304,7 +310,11 @@ def validate_form(form: dict, categories=None, meta: dict | None = None, full: b
         if meta:
             _validate_meta(f, meta, errors)
         _validate_sale(f, errors)
-        _validate_shipping(f, errors)
+        if rg.seller_on(f):  # 로켓그로스만이면 배송·반품은 쿠팡이 맡는다
+            _validate_shipping(f, errors)
+        elif not str(f.get("vendor_user_id") or "").strip():
+            errors.append("WING 로그인 아이디(실사용자 아이디)를 입력하세요")
+        rg.validate(f, meta, option_label, errors)
         if len(f["detail_images"]) > MAX_DETAIL_IMAGES:
             errors.append(f"추가 이미지는 최대 {MAX_DETAIL_IMAGES}개입니다")
         if not str(f.get("image_url") or "").strip():
@@ -440,4 +450,4 @@ def build_product_payload(form: dict, vendor_id: str, request_approval: bool = F
         payload["extraInfoMessage"] = f["extra_info_message"]
     if manual_return:
         payload["returnCenterCode"] = NO_RETURN_CENTER
-    return payload
+    return rg.to_hybrid(payload, f) if rg.rocket_on(f) else payload

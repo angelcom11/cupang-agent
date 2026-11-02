@@ -148,6 +148,13 @@ class MockCoupangClient:
         return {"code": "SUCCESS"}
 
     def create_product(self, payload: dict) -> dict:
+        def _price(item):  # 로켓그로스 요청은 가격이 rocketGrowthItemData/marketplaceItemData 안에 있다
+            nested = item.get("marketplaceItemData") or item.get("rocketGrowthItemData") or {}
+            return item.get("salePrice", nested.get("priceData", {}).get("salePrice", 0))
+
+        def _stock(item):
+            return item.get("maximumBuyCount", (item.get("marketplaceItemData") or {}).get("maximumBuyCount", 0)) or 0
+
         with self._lock:
             self._next_id += 1
             spid = str(self._next_id)
@@ -156,8 +163,9 @@ class MockCoupangClient:
                 self._items[vid] = {
                     "vendor_item_id": vid, "seller_product_id": spid,
                     "name": f"{payload['sellerProductName']} {item.get('itemName', '')}".strip(),
-                    "sale_price": int(item["salePrice"]), "stock": int(item.get("maximumBuyCount", 0) or 0),
-                    "on_sale": True, "status": "임시저장(모의)",
+                    "sale_price": int(_price(item)), "stock": int(_stock(item)),
+                    "on_sale": True,
+                    "status": "임시저장(모의)" + (" · 로켓그로스" if item.get("rocketGrowthItemData") else ""),
                 }
         return {"code": "SUCCESS", "data": spid}
 
