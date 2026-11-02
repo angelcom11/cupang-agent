@@ -25,6 +25,10 @@ def _item(name):
 def test_auto_soldout_and_resume(monkeypatch):
     import mock_backend
     monkeypatch.setattr(mock_backend.random, "random", lambda: 0.5)  # 모의 재고 변동(주문/입고) 끄기
+    # 앞선 테스트의 fetch_items() 가 모의 '입고'(5% 확률)로 재고를 바꿨을 수 있으니 시드 상태로 되돌린다
+    for it in A.client._items.values():
+        if it["name"] == "극세사 차량용 세차타올 5P":
+            it.update(stock=0, on_sale=True)
     A.sync.run_once()
     towel = _item("극세사 차량용 세차타올 5P")  # 시드 재고 0
     assert not towel["on_sale"] and towel["auto_stopped"]
@@ -52,7 +56,8 @@ def test_settings_keys_saved_and_masked():
     c = A.app.test_client()
     c.post("/settings", data={"action": "save_keys", "vendor_id": "A123", "access_key": "AK-TEST", "secret_key": "SK-SECRET"})
     assert A.client.mode == "live" and A.sync.client is A.client
-    assert stat.S_IMODE(os.stat(A.CONFIG_PATH).st_mode) == 0o600
+    if os.name == "posix":  # Windows 는 권한 비트 대신 ACL: 사용자 폴더 기본 권한을 따른다
+        assert stat.S_IMODE(os.stat(A.CONFIG_PATH).st_mode) == 0o600
     html = c.get("/settings").get_data(as_text=True)
     assert "SK-SECRET" not in html and "AK-TEST" not in html and "저장됨" in html
     c.post("/settings", data={"action": "save_keys", "vendor_id": "", "access_key": "", "secret_key": ""})
