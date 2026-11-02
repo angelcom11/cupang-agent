@@ -581,3 +581,4 @@ label.ghostlink{background:var(--surface);color:var(--ink)!important;border:1px 
 .lpframe{position:relative;overflow:hidden;border:1px solid var(--line);border-radius:var(--r);background:#fff}
 .lppreview .lpframe iframe{position:absolute;left:0;top:0;width:1280px;height:800px;border:0;border-radius:0;transform-origin:0 0;pointer-events:none}
 input[type=checkbox],input[type=radio]{accent-color:var(--accent)}
+.card[id]{scroll-margin-top:16px}@media(max-width:760px){.card[id]{scroll-margin-top:150px}}

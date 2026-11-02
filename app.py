@@ -518,9 +518,10 @@ def settings():
             flash("자동화 설정을 저장했습니다", "info")
         elif action == "save_login_page":
             lp, errors = login_page.from_form(request.form, login_page.get(cfg))
-            if errors:
+            if errors:  # 오류 안내는 화면 맨 위에 나오므로 섹션으로 내려가지 않는다
                 for e in errors:
                     flash(e, "danger")
+                return redirect(url_for("settings"))
             else:
                 cfg["login_page"] = lp
                 save_config(cfg)
