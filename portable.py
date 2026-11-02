@@ -97,7 +97,15 @@ def open_browser_when_ready(url: str, port: int):
     threading.Thread(target=run, daemon=True).start()
 
 
+def utf8_output():
+    """Windows 는 출력이 콘솔이 아닐 때(파일로 저장 등) 옛 코드페이지(cp1252 등)를 써서 한글에서 멈춘다."""
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None and hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 def main(argv=None):
+    utf8_output()  # 로그 설정(app 불러오기)보다 먼저
     args = parse_args(argv)
     data_dir = Path(args.data).expanduser().resolve() if args.data else app_dir() / "WING-data"
     data_dir.mkdir(parents=True, exist_ok=True)
