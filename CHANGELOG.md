@@ -1,5 +1,11 @@
 # 변경 기록
 
+## v0.7.0 — 2026-11-03
+- **Docker 설치판**: `Dockerfile` · `docker-compose.yml` · `DOCKER.md`. 이미지 하나로 linux/amd64 · linux/arm64 · linux/arm/v7
+  (Windows·Mac Docker Desktop, Linux, NAS, 라즈베리파이). 데이터는 `/data` 볼륨, 일반 사용자(uid 1000)로 실행, 헬스체크 포함.
+- GitHub Actions 가 태그마다 실행 확인 후 `ghcr.io/angelcom11/cupang-agent` 에 올림.
+- Docker 안에서는 메뉴바 서버 주소를 '지금 접속한 주소'로 표시.
+
 ## v0.6.0 — 2026-11-02
 - **텔레그램 로그인·로그아웃 알림**: 설정의 '보낼 알림'에서 선택. 시각·아이디·IP·기기와 함께 바로 전송.
 - **메뉴에 텔레그램 연결 상태** 표시 (봇 이름, 마지막 전송 결과).

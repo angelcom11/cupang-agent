@@ -1,0 +1,22 @@
+# 이미지에 넣지 않는 것 — 비밀값·내 상점 데이터·빌드 결과
+config.json
+.env
+*.db
+*.db-journal
+uploads/
+categories.json
+WING-data/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.log
+build/
+dist/
+*.spec
+.git/
+.github/
+test_*.py
+conftest.py
+build_portable.py
+sample_products.csv

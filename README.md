@@ -14,6 +14,11 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 출고지·반품지 코드는 `config.example.json` 의 `product_defaults` 참고.
 
 
+## Docker (모든 플랫폼)
+`docker compose up -d` → http://<IP>:26118. 이미지 `ghcr.io/angelcom11/cupang-agent` (linux/amd64 · arm64 · arm/v7),
+데이터는 `/data` 볼륨. 자세한 방법은 [DOCKER.md](DOCKER.md).
+- 새 버전 태그(`vX.Y.Z`)를 올리면 GitHub Actions(`.github/workflows/docker.yml`)가 실행 확인 후 이미지를 올립니다 (`:버전`, `:latest`).
+
 ## 포터블 버전 (Windows · macOS · Linux)
 설치 없이 실행 파일 하나로 쓰는 버전입니다. **GitHub Releases** 에서 내 컴퓨터에 맞는 zip을 받으세요.
 사용법은 [PORTABLE.md](PORTABLE.md) 에 있습니다.

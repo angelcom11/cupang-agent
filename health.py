@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import ipaddress
+import os
 import socket
 import threading
 import time
@@ -63,6 +64,9 @@ def server_ips() -> list[str]:
 
 def addresses(bind_host: str, port: int, request_host: str) -> list[dict]:
     """접속 가능한 주소 목록. 지금 브라우저가 쓰는 주소를 맨 앞에 표시."""
+    if os.environ.get("WING_IN_DOCKER"):
+        # 컨테이너 안의 IP(172.x 등)는 밖에서 쓸 수 없다 → 지금 접속한 주소(호스트 IP:포트 매핑)만 보여 준다
+        return [{"url": f"http://{request_host}", "ip": request_host.split(":")[0], "kind": "Docker", "current": True}]
     local_only = bind_host in ("127.0.0.1", "localhost")
     rows = [{"url": f"http://127.0.0.1:{port}", "ip": "127.0.0.1", "kind": "이 컴퓨터"}]
     if not local_only:

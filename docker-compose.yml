@@ -1,0 +1,17 @@
+# 사용법:  docker compose up -d   →  http://<이 컴퓨터 IP>:26118
+# 처음 접속 시 관리자 계정을 만듭니다. 설정 코드는:  docker compose logs wing | grep "설정 코드"
+services:
+  wing:
+    image: ghcr.io/angelcom11/cupang-agent:latest
+    # 직접 빌드하려면 위 image 줄 대신:  build: .
+    container_name: wing-manager
+    restart: unless-stopped
+    ports:
+      - "26118:26118"          # 왼쪽 숫자를 바꾸면 다른 포트로 접속
+    volumes:
+      - wing-data:/data        # 설정·DB·이미지·로그인 정보
+    environment:
+      TZ: Asia/Seoul
+
+volumes:
+  wing-data:
