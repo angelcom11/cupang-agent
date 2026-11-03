@@ -13,11 +13,7 @@ Docker가 내 컴퓨터에 맞는 것을 자동으로 고릅니다.
 ## 1. 준비
 - Windows / Mac: [Docker Desktop](https://www.docker.com/products/docker-desktop/) 설치
 - Linux: Docker Engine + Compose 플러그인 설치
-- 이미지 저장소(`ghcr.io/angelcom11/cupang-agent`)가 **비공개**이면 한 번 로그인합니다.
-  GitHub에서 `read:packages` 권한 토큰을 만든 뒤:
-  ```bash
-  docker login ghcr.io -u angelcom11      # 비밀번호 칸에 토큰
-  ```
+- 이미지(`ghcr.io/angelcom11/cupang-agent`)는 **공개**라 로그인 없이 받을 수 있습니다.
 
 ## 2. 실행
 [`docker-compose.yml`](docker-compose.yml) 파일을 받아 아무 폴더에 두고:
