@@ -31,6 +31,11 @@ jobs:
             c=$(curl -s -b jar -o /dev/null -w "%{http_code}" "http://127.0.0.1:26118$u"); echo "$c $u"; [ "$c" = 200 ]
           done
           docker logs wing | tail -20
+          # 호스트 폴더(root 소유)를 /data 에 연결해도 뜨는지 (v0.7.1 에서 고친 문제)
+          sudo mkdir -p /tmp/wing-bind && sudo chown root:root /tmp/wing-bind && sudo chmod 755 /tmp/wing-bind
+          docker run -d --name wing-bind -p 26119:26118 -v /tmp/wing-bind:/data wing-check
+          for i in $(seq 1 40); do curl -sf http://127.0.0.1:26119/api/ping && break; sleep 1; done
+          c=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:26119/); echo "bind-mount $c"; docker logs wing-bind | tail -5; [ "$c" = 302 ]
 
       - uses: docker/login-action@v3
         with:

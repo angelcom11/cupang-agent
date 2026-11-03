@@ -39,8 +39,10 @@ docker compose logs wing | grep "설정 코드"      # 또는: docker logs wing-
 - 설정(`config.json`), 로그인 정보(`.env`), DB(`wing.db`), 카테고리, 올린 이미지는 모두 **`wing-data` 볼륨(/data)** 에 저장됩니다.
   컨테이너를 지우거나 새 버전으로 바꿔도 남습니다.
 - 백업: `docker run --rm -v wing-data:/data -v "$PWD":/backup alpine tar czf /backup/wing-backup.tgz -C /data .`
-- 볼륨 대신 폴더를 쓰려면 `- ./wing-data:/data` 로 바꾸고, Linux에서는 `sudo chown -R 1000:1000 wing-data`
-  (컨테이너는 보안을 위해 일반 사용자 uid 1000 으로 실행됩니다).
+- 볼륨 대신 폴더를 쓰려면 `- ./wing-data:/data` 로 바꾸면 됩니다. 폴더 권한은 컨테이너가 시작할 때 자동으로 맞춥니다.
+- 컨테이너는 권한을 맞춘 뒤 일반 사용자(기본 uid 1000)로 실행됩니다. NAS 등에서 특정 사용자로 실행하려면
+  `PUID` / `PGID` 환경변수를 정하세요 (예: Synology `PUID=1026`, `PGID=100`).
+- `user:` / `--user` 를 직접 지정하면 권한을 자동으로 맞출 수 없으니, 그 사용자가 쓸 수 있는 폴더를 연결하세요.
 
 ## 5. 업데이트 · 끄기
 ```bash

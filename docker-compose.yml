@@ -12,6 +12,8 @@ services:
       - wing-data:/data        # 설정·DB·이미지·로그인 정보
     environment:
       TZ: Asia/Seoul
+      # PUID: 1000             # 호스트 폴더를 연결할 때 파일 주인을 맞추려면 (NAS 사용자 번호 등)
+      # PGID: 1000
 
 volumes:
   wing-data:

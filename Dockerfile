@@ -18,9 +18,11 @@ RUN apt-get update \
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install -r requirements.txt
-COPY --chown=wing:wing . .
+COPY . .
+RUN chmod 755 /app/docker-entrypoint.sh
 
-USER wing
+# root 로 시작해 /data 권한을 맞춘 뒤 일반 사용자(PUID/PGID, 기본 1000)로 바꿔 실행한다 (docker-entrypoint.sh)
+ENV PUID=1000 PGID=1000
 VOLUME ["/data"]
 EXPOSE 26118
 
@@ -28,4 +30,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:26118/api/ping', timeout=4).status == 200 else 1)"
 
 # 데이터(설정·DB·이미지·로그인 정보)는 모두 /data 볼륨에 저장됩니다.
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["python", "portable.py", "--no-browser", "--host", "0.0.0.0", "--port", "26118", "--data", "/data"]

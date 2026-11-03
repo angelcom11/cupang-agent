@@ -1,5 +1,10 @@
 # 변경 기록
 
+## v0.7.1 — 2026-11-03
+- **Docker 수정**: 호스트 폴더를 `/data` 에 연결하면 `sqlite3.OperationalError: unable to open database file` 로
+  계속 재시작되던 문제. 컨테이너가 시작할 때 `/data` 권한을 맞춘 뒤 일반 사용자로 실행 (`docker-entrypoint.sh`).
+  `PUID`/`PGID` 로 실행 사용자 지정 가능, 쓸 수 없으면 원인과 해결 방법을 로그에 표시.
+
 ## v0.7.0 — 2026-11-03
 - **Docker 설치판**: `Dockerfile` · `docker-compose.yml` · `DOCKER.md`. 이미지 하나로 linux/amd64 · linux/arm64 · linux/arm/v7
   (Windows·Mac Docker Desktop, Linux, NAS, 라즈베리파이). 데이터는 `/data` 볼륨, 일반 사용자(uid 1000)로 실행, 헬스체크 포함.
