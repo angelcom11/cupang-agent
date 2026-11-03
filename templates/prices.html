@@ -4,7 +4,8 @@
 {% if sync.competitor_is_mock_on_live %}<div class="flash danger">⚠ 실제 상점에 연결되어 있지만 경쟁 판매자 가격은 아직 <b>모의(가짜) 데이터</b>입니다.
   그래서 자동 가격조정과 최저가 알림은 멈춰 두었습니다. 실제 경쟁가 수집 방법을 정한 뒤 켜집니다.</div>{% endif %}
 <section class="card">
-  <p class="muted">10초마다 화면을 갱신합니다. 자동조정을 켜면 <b>경쟁 최저가 − 인하폭</b>으로 맞추되, 하한가 아래로는 내리지 않습니다.</p>
+  <p class="muted">경쟁 판매자를 누르면 그 판매자의 쿠팡 샵이 새 탭으로 열립니다. 샵 주소를 모르는 판매자(<span class="chip noshop">＋</span> 표시)는 눌러서 업체코드나 샵 주소를 한 번 등록하세요.
+    10초마다 화면을 갱신합니다. 자동조정을 켜면 <b>경쟁 최저가 − 인하폭</b>으로 맞추되, 하한가 아래로는 내리지 않습니다.</p>
   <table id="price-table">
     <tr><th>상품</th><th class="r">내 가격</th><th class="r">경쟁 최저</th><th class="r">차이</th><th class="c">순위</th>
         <th>경쟁 판매자</th><th>최저가 추이</th><th>자동조정 규칙</th></tr>
@@ -15,7 +16,7 @@
       <td class="r low">{{ '{:,}'.format(r.lowest) ~ '원' if r.lowest else '-' }}</td>
       <td class="r diff {{ 'bad' if r.diff and r.diff > 0 else 'good' }}">{{ '{:+,}'.format(r.diff) if r.diff is not none else '-' }}</td>
       <td class="c"><span class="pill rank {{ 'good' if r.rank==1 else 'bad' }}">{{ r.rank }}/{{ r.total }}</span></td>
-      <td class="comps">{% for c in r.competitors %}<span class="chip">{{ c.seller }} {{ '{:,}'.format(c.price) }}</span>{% endfor %}</td>
+      <td class="comps" data-comps='{{ r.competitors|tojson }}'></td>
       <td>{% set h = r.history %}{% if h|length > 1 %}
         {% set lo = h|map(attribute='low')|min %}{% set hi = h|map(attribute='low')|max %}{% set span = (hi - lo) or 1 %}
         <svg width="120" height="32" class="spark"><polyline fill="none" stroke="#3b82f6" stroke-width="1.5" points="
@@ -36,10 +37,42 @@
 {% endblock %}
 {% block scripts %}
 <script>
+// 경쟁 판매자 칩: 샵 주소가 있으면 새 탭 링크, 없으면 눌러서 주소 등록
+function compChips(comps) {
+  return comps.map((c) => {
+    const label = `${c.seller} ${c.price.toLocaleString('ko-KR')}`;
+    if (c.shop) {
+      const a = document.createElement('a');
+      a.className = 'chip shop'; a.href = c.shop; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      a.textContent = label + ' ↗'; a.title = `${c.seller} 쿠팡 샵 열기` + (c.shop_source === 'saved' ? ' (직접 등록한 주소 · Alt+클릭으로 바꾸기)' : '');
+      a.addEventListener('click', (e) => { if (e.altKey && c.shop_source === 'saved') { e.preventDefault(); askShop(c); } });
+      return a;
+    }
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'chip noshop'; b.textContent = label + ' ＋';
+    b.title = `${c.seller} 샵 주소 등록`; b.addEventListener('click', () => askShop(c));
+    return b;
+  });
+}
+async function askShop(c) {
+  const v = prompt(`'${c.seller}' 판매자의 쿠팡 샵 주소나 업체코드를 입력하세요.\n예: A00012345  또는  https://shop.coupang.com/A00012345\n(비우고 확인하면 등록한 주소를 지웁니다)`, c.shop_source === 'saved' ? c.shop : '');
+  if (v === null) return;
+  const r = await fetch('/api/competitor-shop', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ seller: c.seller, url: v }) });
+  const j = await r.json();
+  if (!r.ok) { alert(j.error || '등록하지 못했습니다'); return; }
+  await refreshPrices();
+  if (j.shop) window.open(j.shop, '_blank', 'noopener');
+}
+document.querySelectorAll('td.comps[data-comps]').forEach((td) => td.replaceChildren(...compChips(JSON.parse(td.dataset.comps))));
+
 let t = 10;
 setInterval(async () => {
   t -= 1; document.getElementById('tick').textContent = t;
   if (t > 0) return; t = 10;
+  await refreshPrices(true);
+}, 1000);
+async function refreshPrices(flash) {
   const d = await (await fetch('/api/prices')).json();
   document.getElementById('last-sync').textContent = d.last_sync || '-';
   for (const r of d.rows) {
@@ -52,11 +85,9 @@ setInterval(async () => {
     diff.className = 'r diff ' + (r.diff > 0 ? 'bad' : 'good');
     const rank = tr.querySelector('.rank');
     rank.textContent = `${r.rank}/${r.total}`; rank.className = 'pill rank ' + (r.rank === 1 ? 'good' : 'bad');
-    tr.querySelector('.comps').replaceChildren(...r.competitors.map(c => {
-      const s = document.createElement('span'); s.className = 'chip';
-      s.textContent = `${c.seller} ${c.price.toLocaleString('ko-KR')}`; return s; }));
-    tr.classList.add('flashrow'); setTimeout(() => tr.classList.remove('flashrow'), 600);
+    tr.querySelector('.comps').replaceChildren(...compChips(r.competitors));
+    if (flash) { tr.classList.add('flashrow'); setTimeout(() => tr.classList.remove('flashrow'), 600); }
   }
-}, 1000);
+}
 </script>
 {% endblock %}

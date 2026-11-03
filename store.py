@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS competitor_prices (
   id INTEGER PRIMARY KEY AUTOINCREMENT, vendor_item_id TEXT, seller TEXT,
   price INTEGER, my_price INTEGER, checked_at TEXT);
 CREATE INDEX IF NOT EXISTS ix_cp ON competitor_prices(vendor_item_id, checked_at);
+CREATE TABLE IF NOT EXISTS competitor_shops (seller TEXT PRIMARY KEY, url TEXT, updated_at TEXT);
 CREATE TABLE IF NOT EXISTS alerts (
   id INTEGER PRIMARY KEY AUTOINCREMENT, level TEXT, kind TEXT, message TEXT, created_at TEXT);
 CREATE TABLE IF NOT EXISTS drafts (
@@ -46,6 +47,8 @@ class Store:
         for col in ("featured", "auto_stopped"):  # 이전 버전 DB 업그레이드
             if col not in cols:
                 self._q(f"ALTER TABLE rules ADD COLUMN {col} INTEGER DEFAULT 0")
+        if "url" not in {r["name"] for r in self._q("PRAGMA table_info(competitor_prices)")}:
+            self._q("ALTER TABLE competitor_prices ADD COLUMN url TEXT DEFAULT ''")
         cols = {r["name"] for r in self._q("PRAGMA table_info(registrations)")}
         for col in REG_STATUS_COLS:  # 쿠팡 심사 상태 (상태변경이력 조회 결과)
             if col not in cols:
@@ -105,13 +108,23 @@ class Store:
     def add_competitor_prices(self, vid: str, my_price: int, rows: list[dict]):
         ts = now()
         for r in rows:
-            self._q("INSERT INTO competitor_prices(vendor_item_id,seller,price,my_price,checked_at) VALUES (?,?,?,?,?)",
-                    (vid, r["seller"], r["price"], my_price, ts))
+            self._q("INSERT INTO competitor_prices(vendor_item_id,seller,price,my_price,checked_at,url) VALUES (?,?,?,?,?,?)",
+                    (vid, r["seller"], r["price"], my_price, ts, r.get("url") or r.get("vendor_id") or ""))
 
     def latest_competitors(self, vid: str) -> list[dict]:
         return self._q(
-            "SELECT seller, price, checked_at FROM competitor_prices WHERE vendor_item_id=? AND checked_at="
+            "SELECT seller, price, checked_at, url FROM competitor_prices WHERE vendor_item_id=? AND checked_at="
             "(SELECT MAX(checked_at) FROM competitor_prices WHERE vendor_item_id=?) ORDER BY price", (vid, vid))
+
+    def competitor_shops(self) -> dict[str, str]:
+        return {r["seller"]: r["url"] for r in self._q("SELECT seller, url FROM competitor_shops")}
+
+    def set_competitor_shop(self, seller: str, url: str | None):
+        if url:
+            self._q("INSERT INTO competitor_shops VALUES (?,?,?) ON CONFLICT(seller) DO UPDATE SET url=excluded.url, "
+                    "updated_at=excluded.updated_at", (seller, url, now()))
+        else:
+            self._q("DELETE FROM competitor_shops WHERE seller=?", (seller,))
 
     def lowest_history(self, vid: str, limit: int = 30) -> list[dict]:
         rows = self._q(

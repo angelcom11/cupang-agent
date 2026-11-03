@@ -308,6 +308,10 @@
 @media(max-width:760px){:where(:root[data-theme=dark]) #reg-history td:nth-child(2){color:var(--text-3)}}
 @media(max-width:760px){:where(:root[data-theme=dark]) #reg-history td:nth-child(3){color:var(--ink)}}
 @media(max-width:760px){:where(:root[data-theme=dark]) #reg-history td:nth-child(4){color:var(--text-2)}}
+:where(:root[data-theme=dark]) a.chip.shop{color:var(--accent-ink);border-color:var(--line)}
+:where(:root[data-theme=dark]) a.chip.shop:hover{background:var(--accent-soft);border-color:var(--accent)}
+:where(:root[data-theme=dark]) button.chip.noshop{color:var(--text-2);background:var(--surface-2);border:1px dashed var(--field)}
+:where(:root[data-theme=dark]) button.chip.noshop:hover{background:var(--surface-2);border-color:var(--accent);color:var(--accent-ink)}
 /* 수동 보정 */
 :root[data-theme=dark] .wysiwyg{background:var(--surface)}
 :root[data-theme=dark] .editor,:root[data-theme=dark] textarea.src{background:#fff;color:#111827;color-scheme:light}

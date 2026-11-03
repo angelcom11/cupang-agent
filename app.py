@@ -24,6 +24,7 @@ from categories import CategoryError, CategoryStore, nodes_from_api_tree, nodes_
 import auth as wing_auth
 import login_page
 import reg_status
+import competitor_shop
 import health
 import product_form as pf
 import rocket_growth
@@ -95,8 +96,9 @@ THEMES = {"system": "시스템 설정 따르기", "light": "라이트 모드", "
 
 def _price_rows():
     rows = []
+    shops = store.competitor_shops()
     for it in store.items():
-        comps = store.latest_competitors(it["vendor_item_id"])
+        comps = competitor_shop.attach(store.latest_competitors(it["vendor_item_id"]), shops)
         low = min((c["price"] for c in comps), default=None)
         prices = sorted([c["price"] for c in comps] + [it["sale_price"]])
         rows.append({
@@ -676,6 +678,24 @@ def api_prices():
     for r in rows:
         r.pop("history", None)
     return jsonify({"last_sync": sync.last_sync, "rows": rows})
+
+
+@app.route("/api/competitor-shop", methods=["POST"])
+def api_competitor_shop():
+    """경쟁 판매자 샵 주소 등록/삭제 (업체코드 A00012345 또는 쿠팡 주소만)."""
+    data = request.get_json(silent=True) or {}
+    seller = str(data.get("seller") or "").strip()[:80]
+    raw = str(data.get("url") or "").strip()
+    if not seller:
+        return jsonify({"error": "판매자 이름이 없습니다"}), 400
+    if not raw:
+        store.set_competitor_shop(seller, None)
+        return jsonify({"seller": seller, "shop": None})
+    url = competitor_shop.shop_url(raw)
+    if not url:
+        return jsonify({"error": "쿠팡 업체코드(예: A00012345) 또는 쿠팡 주소(shop.coupang.com/…, www.coupang.com/…)만 넣을 수 있습니다"}), 400
+    store.set_competitor_shop(seller, url)
+    return jsonify({"seller": seller, "shop": url})
 
 
 @app.route("/api/inventory")

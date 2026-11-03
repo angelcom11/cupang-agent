@@ -613,3 +613,11 @@ input[type=checkbox],input[type=radio]{accent-color:var(--accent)}
   #reg-history td:nth-child(4){font-size:12px;color:var(--text-2)}
   #reg-history td[colspan]{grid-column:1/-1}
 }
+/* 경쟁 판매자 샵 링크 */
+a.chip.shop{color:var(--accent-ink);border-color:var(--line);text-decoration:none;cursor:pointer}
+a.chip.shop:hover{background:var(--accent-soft);border-color:var(--accent)}
+button.chip.noshop{font:inherit;font-size:12px;font-weight:400;color:var(--text-2);background:var(--surface-2);border:1px dashed var(--field);border-radius:6px;padding:2px 6px;margin:1px;cursor:pointer}
+button.chip.noshop:hover{background:var(--surface-2);border-color:var(--accent);color:var(--accent-ink)}
+span.chip.noshop{border-style:dashed}
+td.comps{min-width:14em}
+#price-table td:first-child{min-width:9em}#price-table th:nth-child(7){white-space:nowrap}
