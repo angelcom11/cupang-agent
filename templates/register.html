@@ -358,20 +358,40 @@
 
   <div class="stack">
     <section class="card">
-      <h2>임시저장 목록</h2>
+      <div class="alerts-head">
+        <h2>임시저장 목록</h2>
+        {% if drafts %}<a class="btn-like sm ghostlink" href="{{ url_for('export_drafts') }}" title="전체 임시저장을 일괄등록 CSV 템플릿으로">⬇ 전체 템플릿</a>{% endif %}
+      </div>
+      <form method="post" id="draft-form">
+      {% if drafts %}
+      <div class="bulkbar">
+        <label class="inline"><input type="checkbox" id="dr-all"> 전체 선택</label>
+        <span class="muted" id="dr-info"></span>
+      </div>
+      <div class="bulkbar dr-actions">
+        <button type="submit" class="ghost tiny dr-need" formaction="{{ url_for('export_drafts') }}" disabled
+                title="선택한 임시저장을 일괄등록 CSV 템플릿으로 내려받기">⬇ 선택 템플릿</button>
+        <label class="inline"><input type="checkbox" name="request_approval"> 바로 승인요청</label>
+        <button type="submit" class="tiny dr-need" id="dr-submit" formaction="{{ url_for('submit_drafts') }}" disabled>선택 등록</button>
+      </div>
+      {% endif %}
       <table>
-        <tr><th>상품명</th><th>상태</th><th>저장 시각</th><th></th></tr>
+        <tr><th class="c chk"></th><th>상품명</th><th>상태</th><th>저장 시각</th><th></th></tr>
         {% for d in drafts %}
         <tr class="{{ 'cur' if d.id == draft_id }}">
+          <td class="c chk"><input type="checkbox" name="draft_ids" value="{{ d.id }}" class="dr-chk" aria-label="선택"></td>
           <td><a href="{{ url_for('register', draft_id=d.id) }}">{{ d.name }}</a></td>
           <td>{% if d.note %}<span class="pill good">등록됨</span>{% else %}<span class="pill">작성 중</span>{% endif %}</td>
           <td class="mono">{{ d.updated_at[5:16] }}</td>
           <td class="r"><a class="btn-like sm" href="{{ url_for('register', draft_id=d.id) }}">불러오기</a>
-            <form method="post" action="{{ url_for('delete_draft', draft_id=d.id) }}" class="inl"
-                  onsubmit="return confirm('이 임시저장을 삭제할까요?')"><button class="ghost tiny">삭제</button></form></td>
+            <button type="submit" class="ghost tiny" formaction="{{ url_for('delete_draft', draft_id=d.id) }}"
+                    onclick="return confirm('이 임시저장을 삭제할까요?')">삭제</button></td>
         </tr>
-        {% else %}<tr><td colspan="4" class="muted">임시저장한 상품이 없습니다</td></tr>{% endfor %}
+        {% else %}<tr><td colspan="5" class="muted">임시저장한 상품이 없습니다</td></tr>{% endfor %}
       </table>
+      </form>
+      {% if drafts %}<p class="muted dr-note">템플릿은 'CSV 일괄 등록'에 그대로 올릴 수 있습니다. CSV는 한 줄이 옵션 1개 상품이라
+        옵션이 여러 개인 상품은 옵션마다 한 줄로 나뉩니다 — 옵션 상품은 '선택 등록'으로 등록하세요.</p>{% endif %}
     </section>
 
     <section class="card">
@@ -443,6 +463,22 @@
 <script src="{{ url_for('static', filename='editor.js') }}"></script>
 <script src="{{ url_for('static', filename='category.js') }}"></script>
 <script src="{{ url_for('static', filename='register.js') }}"></script>
+<script>
+(() => {  // 임시저장 목록: 선택 → 템플릿 / 선택 등록
+  const chks = [...document.querySelectorAll('.dr-chk')], all = document.getElementById('dr-all');
+  if (!all) return;
+  const info = document.getElementById('dr-info'), need = [...document.querySelectorAll('.dr-need')], sub = document.getElementById('dr-submit');
+  const upd = () => { const n = chks.filter((c) => c.checked).length;
+    need.forEach((b) => { b.disabled = !n; }); sub.textContent = n ? `선택 등록 (${n})` : '선택 등록';
+    info.textContent = n ? `${n}개 선택` : ''; all.checked = n === chks.length; };
+  chks.forEach((c) => c.addEventListener('change', upd));
+  all.addEventListener('change', () => { chks.forEach((c) => { c.checked = all.checked; }); upd(); });
+  sub.addEventListener('click', (e) => {
+    const n = chks.filter((c) => c.checked).length, appr = document.querySelector('#draft-form [name=request_approval]').checked;
+    if (!confirm(`선택한 임시저장 ${n}개를 쿠팡에 등록할까요?\n${appr ? '바로 승인요청까지 합니다.' : '쿠팡에 임시저장 상태로 등록합니다.'}`)) e.preventDefault();
+  });
+})();
+</script>
 <script>
 (() => {
   const chks = [...document.querySelectorAll('.rg-chk')], all = document.getElementById('rg-all');

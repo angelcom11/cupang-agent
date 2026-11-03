@@ -25,6 +25,7 @@ import auth as wing_auth
 import login_page
 import reg_status
 import competitor_shop
+import draft_export
 import health
 import product_form as pf
 import rocket_growth
@@ -404,6 +405,60 @@ def export_registrations():
             lines.append(f"    payload: {r['payload']}")
     return Response("\n".join(lines) + "\n", mimetype="text/plain; charset=utf-8", headers={
         "Content-Disposition": f"attachment; filename=wing-register-{datetime.now():%Y%m%d-%H%M%S}.log"})
+
+
+def _selected_drafts() -> list[dict]:
+    ids = [int(i) for i in request.form.getlist("draft_ids") if i.isdigit()]
+    return [d for d in (store.draft(i) for i in ids) if d]
+
+
+@app.route("/register/drafts/export.csv", methods=["GET", "POST"])
+def export_drafts():
+    """임시저장 → 일괄등록 템플릿 CSV. 고른 것이 없으면(또는 GET) 전체."""
+    drafts = _selected_drafts() if request.method == "POST" else []
+    if not drafts:
+        drafts = [x for x in (store.draft(d["id"]) for d in store.drafts(limit=1000)) if x]
+    if not drafts:
+        flash("내려받을 임시저장이 없습니다", "danger")
+        return redirect(url_for("register"))
+    text, _, _ = draft_export.drafts_csv(drafts)
+    return Response(text, mimetype="text/csv; charset=utf-8", headers={
+        "Content-Disposition": f"attachment; filename=coupang_drafts_{datetime.now():%Y%m%d-%H%M%S}.csv"})
+
+
+@app.route("/register/drafts/submit", methods=["POST"])
+def submit_drafts():
+    """고른 임시저장만 쿠팡에 등록. 각각 단건 등록과 같은 검사를 거치고, 성공하면 임시저장에 '등록됨'으로 남긴다."""
+    drafts = _selected_drafts()
+    if not drafts:
+        flash("등록할 임시저장을 선택하세요", "danger")
+        return redirect(url_for("register"))
+    approve = bool(request.form.get("request_approval"))
+    defaults = pf.defaults_from_config(cfg)
+    ok = fail = 0
+    for d in drafts:
+        form = pf.normalize_form(d["data"], defaults)
+        name = product_names(form)[0] or f"임시저장 #{d['id']}"
+        meta = category_meta(form.get("category_code"))
+        errors = validate_form(form, categories, meta)
+        if meta is None and form.get("category_code"):
+            errors.append("카테고리 정보(필수 옵션·고시정보)를 쿠팡에서 불러오지 못했습니다")
+        if errors:
+            fail += 1
+            store.log_registration(name, False, "; ".join(errors), form, mode=client.mode)
+            flash(f"'{name}' 등록 안 함: " + "; ".join(errors[:3]) + (f" 외 {len(errors) - 3}건" if len(errors) > 3 else ""),
+                  "danger")
+            continue
+        payload = build_product_payload(form, cfg.get("vendor_id", "A00000000"), approve, meta)
+        success, msg = _submit(name, payload)
+        if success:
+            ok += 1
+            store.save_draft(d["data"], d["id"], note=msg)
+        else:
+            fail += 1
+    flash(f"선택 등록: 성공 {ok}건 / 실패 {fail}건" + (" (바로 승인요청)" if approve else " (쿠팡에 임시저장)"),
+          "info" if not fail else "danger")
+    return redirect(url_for("register"))
 
 
 @app.route("/register/template.csv")

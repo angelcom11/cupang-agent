@@ -621,3 +621,7 @@ button.chip.noshop:hover{background:var(--surface-2);border-color:var(--accent);
 span.chip.noshop{border-style:dashed}
 td.comps{min-width:14em}
 #price-table td:first-child{min-width:9em}#price-table th:nth-child(7){white-space:nowrap}
+/* 임시저장 목록: 선택 템플릿·선택 등록 */
+.dr-actions{margin-top:0}.dr-actions #dr-submit{margin-left:auto}
+.dr-note{margin:8px 0 0;font-size:12px}
+#draft-form th{white-space:nowrap}#draft-form td.mono{white-space:nowrap}
