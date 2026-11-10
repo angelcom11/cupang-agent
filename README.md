@@ -17,18 +17,14 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 ## Docker (모든 플랫폼)
 `docker compose up -d` → http://<IP>:26118. 이미지 `ghcr.io/angelcom11/cupang-agent` (linux/amd64 · arm64 · arm/v7),
 데이터는 `/data` 볼륨. 자세한 방법은 [DOCKER.md](DOCKER.md).
-- 새 버전 태그(`vX.Y.Z`)를 올리면 GitHub Actions(`.github/workflows/docker.yml`)가 실행 확인 후 이미지를 올립니다 (`:버전`, `:latest`).
-
-## 포터블 버전 (Windows · macOS · Linux)
-설치 없이 실행 파일 하나로 쓰는 버전입니다. **GitHub Releases** 에서 내 컴퓨터에 맞는 zip을 받으세요.
-사용법은 [PORTABLE.md](PORTABLE.md) 에 있습니다.
-
-- 데이터는 실행 파일 옆 `WING-data/` 폴더에 저장됩니다 (`config.json` · `wing.db` · `uploads/`).
-- 기본은 이 컴퓨터에서만 접속(127.0.0.1). `--lan` 을 붙이면 같은 네트워크의 휴대폰에서도 접속할 수 있습니다.
 - 새 버전 배포: `version.py` 의 VERSION 을 올리고 `git tag vX.Y.Z && git push origin vX.Y.Z`
-  → GitHub Actions(`.github/workflows/portable.yml`)가 5종(windows-x64, macos-arm64, macos-x64, linux-x64, linux-arm64)을
-  빌드·실행 확인한 뒤 Releases 에 올립니다.
-- 직접 빌드: `pip install pyinstaller && python build_portable.py` (지금 OS용만 만들어집니다).
+  → GitHub Actions(`.github/workflows/docker.yml`)가 실행 확인 후 이미지를 올립니다 (`:버전`, `:latest`). 배포는 Docker 이미지뿐입니다.
+
+## 포터블 버전 (v0.8.1 부터 배포 중단)
+설치 없이 쓰던 포터블 실행 파일(zip)은 **v0.8.1 부터 만들지 않습니다.** 새 버전은 위의 Docker 이미지로만 배포합니다.
+마지막 포터블 배포는 [v0.7.3](https://github.com/angelcom11/cupang-agent/releases/tag/v0.7.3) 이고, 옛 사용법은 [PORTABLE.md](PORTABLE.md) 에 남겨 두었습니다.
+소스를 직접 받아 쓰려면 위의 **실행**(`python app.py`)을 따르세요. `portable.py`/`build_portable.py` 는 코드에 남아 있지만
+(`portable.py` 는 Docker 이미지의 실행 명령이 씁니다) 자동 빌드·릴리스는 없습니다.
 
 ## 설정 한눈에 보기
 설정 화면(`/settings`)의 항목과 저장 위치입니다. **비밀값은 GitHub 에 올라가지 않습니다** (`.gitignore`).
@@ -46,7 +42,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 - 키 이름과 기본값 예시: [`config.example.json`](config.example.json) (복사해서 `config.json` 으로 써도 되고, 설정 화면에서 입력해도 됩니다).
 - 옮기기·백업: `config.json`, `.env`, `wing.db`, `categories.json`, `uploads/` 를 함께 복사하면 그대로 이어서 씁니다
-  (포터블은 `WING-data/` 폴더 하나).
+  (Docker 는 `/data` 볼륨 하나).
 - 비밀번호를 잊으면 `.env` 에서 `WING_LOGIN_` 으로 시작하는 줄을 지우고 다시 실행 → 계정 다시 만들기.
 
 ## 로그인
@@ -68,18 +64,18 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 - **서버 접속 주소**: 이 프로그램이 돌고 있는 서버의 주소(내부망 LAN · Tailscale · 이 컴퓨터). 지금 접속한 주소가 맨 위, 누르면 복사.
 
 ## 실시간 검색어
-위쪽 탭에서 출처(**구글 · 네이버 · 다음 · 쿠팡**)를 고릅니다. 출처마다 되는 것이 다릅니다.
+판매하는 상품(이름이 같은 옵션은 한 번만)마다 **연관검색어**를 보여 줍니다. 상품 등록의 검색어 칸에 넣을 낱말을 고를 때 참고하세요.
+위쪽 탭에서 출처(**구글 · 네이버 · 다음 · 쿠팡**)를 고르면 그 출처의 자동완성이 나오고, 칩을 누르면 그 출처의 검색 결과가 새 탭으로 열립니다.
 
-| 출처 | 인기 검색어 1~10위 | 내 상품 연관검색어 |
-|---|---|---|
-| 구글 | 구글 트렌드(한국) 일간 인기 검색어 — 쇼핑 전용 아님 | 구글 자동완성 |
-| 네이버 | 없음 (실시간 검색어 서비스 종료) | 네이버 자동완성 |
-| 다음 | 없음 (실시간 검색어 서비스 종료) | 다음 자동완성 |
-| 쿠팡 | 없음 (공개 API 없음) | 자동완성을 시도하지만 서버 접속을 막는 경우가 있음 (403) — 막히면 이유를 화면에 표시 |
+| 출처 | 연관검색어 |
+|---|---|
+| 구글 | 구글 자동완성 |
+| 네이버 | 네이버 자동완성 |
+| 다음 | 다음 자동완성 |
+| 쿠팡 | 자동완성을 시도하지만 서버 접속을 막는 경우가 있음 (403) — 막히면 이유를 화면에 표시 |
 
-- 순위 변동(▲ 오름 · ▼ 내림 · NEW 새로 진입)은 이 프로그램이 앞서 가져온 순위와의 비교입니다.
-- 연관검색어는 판매하는 상품(이름이 같은 옵션은 한 번만)마다 보여 줍니다. 상품 등록의 검색어 칸에 넣을 낱말을 고를 때 참고하세요.
-- **외부로 나가는 정보**: 상품 이름에서 뽑은 낱말(예: `스테인리스 텀블러`)만 선택한 출처로 전송됩니다 (색·용량·수량은 뺌). 순위는 5분, 연관검색어는 30분 캐시합니다.
+- 인기 검색어 순위(1~10위)는 보여 주지 않습니다. 네이버·다음은 실시간 검색어 서비스를 종료했고, 쿠팡은 공개 API가 없습니다.
+- **외부로 나가는 정보**: 상품 이름에서 뽑은 낱말(예: `스테인리스 텀블러`)만 선택한 출처로 전송됩니다 (색·용량·수량은 뺌). 같은 검색어는 30분 동안 다시 묻지 않습니다.
 - 네이버·다음·구글 자동완성은 공식 API가 아니라 각 사이트 검색창이 쓰는 공개 주소라 예고 없이 바뀔 수 있습니다.
 - 화면 갱신용 주소: `/api/keywords?source=google|naver|daum|coupang`. 설정 `keyword_provider` = `mock` 이면 모의 데이터.
 
@@ -96,19 +92,19 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 | `store.py` | SQLite (상품 스냅샷, 경쟁가 이력, 규칙, 알림, 등록 로그) |
 | `mock_backend.py` | 모의 쿠팡 클라이언트 + 모의 경쟁가 공급자 |
 | `app.py` | 화면: 대시보드 / 재고 / 경쟁가 비교 / 실시간 검색어 / 상품 등록(단건·CSV) / 설정 |
-| `keywords.py` | 실시간 검색어 순위 · 내 상품 연관검색어 (구글·네이버·다음·쿠팡 공급자 + 모의 공급자) |
+| `keywords.py` | 내 상품 연관검색어 (구글·네이버·다음·쿠팡 공급자 + 모의 공급자) |
 | `auth.py` | 로그인·계정 만들기·로그아웃·비밀번호 변경 (`.env`) |
 | `login_page.py` | 로그인 화면 꾸미기 설정 검사·기본값 |
 | `notifier.py` | 텔레그램 알림 (주제·빈도·시간대) |
 | `health.py` | 메뉴바 연결 상태 |
 | `product_form.py`, `rocket_growth.py`, `categories.py` | 상품 등록 양식·로켓그로스·카테고리 |
-| `portable.py`, `build_portable.py` | 포터블 실행기·빌드 |
+| `portable.py`, `build_portable.py` | 실행기(Docker 이미지의 실행 명령이 씀) · 포터블 직접 빌드(자동 빌드·배포는 안 함) |
 | `gen_dark_css.py` | `style.css` → `static/dark.css` (다크 모드) |
 
 ## 주의
 - 쿠팡 Open API에는 **다른 판매자 가격 조회 API가 없습니다.** 경쟁가 공급자(`fetch(item)`)는
   교체 가능하게 분리해 두었고, 현재는 모의 데이터입니다.
-- 쿠팡 Open API에는 검색어 순위·연관검색어 조회도 **없습니다.** 실시간 검색어 화면은 구글·네이버·다음·쿠팡의 공개 주소에 직접 묻고
+- 쿠팡 Open API에는 연관검색어 조회도 **없습니다.** 실시간 검색어 화면은 구글·네이버·다음·쿠팡의 공개 주소에 직접 묻고
   (`keywords.py`), 쿠팡은 서버 접속을 막는 경우가 있어 막히면 이유를 표시합니다.
 - 자동 가격조정은 기본 OFF, 하한가 미만으로는 내리지 않습니다.
 - 상품 등록은 기본 임시저장(`requested=false`)입니다.
