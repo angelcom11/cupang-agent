@@ -1,6 +1,6 @@
 # 변경 기록
 
-## 다음 버전
+## v0.8.2 — 2026-11-10
 - **포터블 실행 파일 배포를 중단하고 Docker 이미지만 배포.** 태그를 올려도 포터블 빌드·GitHub Releases 업로드는 하지 않음
   (`.github/workflows/portable.yml` 삭제). 마지막 포터블 배포는 v0.7.3. `portable.py` 는 Docker 이미지의 실행 명령이 쓰므로 그대로 둠.
 
