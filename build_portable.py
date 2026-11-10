@@ -3,7 +3,7 @@
     python build_portable.py          → dist/WING-Manager-<버전>-<OS>-<CPU>.zip
 
 PyInstaller 는 다른 OS용 파일을 만들 수 없으므로(교차 빌드 불가) 각 OS에서 한 번씩 돌린다.
-GitHub Actions(.github/workflows/portable.yml)가 Windows·Linux·macOS 에서 자동으로 해 준다.
+v0.8.1 부터 GitHub Actions 자동 빌드·릴리스는 하지 않는다(Docker 이미지만 배포). 필요하면 각 OS에서 직접 돌린다.
 """
 from __future__ import annotations
 
