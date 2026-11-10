@@ -4,6 +4,7 @@ import os
 import tempfile
 
 os.environ.setdefault("WING_DATA_DIR", tempfile.mkdtemp())
+os.environ.setdefault("WING_KEYWORDS", "mock")  # 테스트는 인터넷(구글·네이버·다음·쿠팡)에 묻지 않는다
 
 import pytest  # noqa: E402
 

@@ -626,7 +626,7 @@ td.comps{min-width:14em}
 .dr-note{margin:8px 0 0;font-size:12px}
 #draft-form th{white-space:nowrap}#draft-form td.mono{white-space:nowrap}
 /* 실시간 검색어 */
-#kw-table th{white-space:nowrap}#kw-table td.rk{width:4em;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
+#kw-src{margin-bottom:16px}.kwmsg{margin:0;padding:28px 12px;text-align:center;color:var(--text-3);word-break:keep-all}#kw-table th{white-space:nowrap}.kwnote{white-space:nowrap;margin-left:6px;font-size:12px;font-weight:400;color:var(--text-3);font-variant-numeric:tabular-nums}#kw-table td.rk{width:4em;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
 #kw-table tr.top td.rk{color:var(--accent-ink)}
 #kw-table td a,#kw-rel td:first-child{color:var(--ink);font-weight:600}
 #kw-table td a{text-decoration:none}#kw-table td a:hover{color:var(--accent-ink);text-decoration:underline}

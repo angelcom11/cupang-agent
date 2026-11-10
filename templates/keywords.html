@@ -2,46 +2,34 @@
 {% block title %}실시간 검색어 – WING 매니저{% endblock %}
 {% block heading %}실시간 검색어 <small class="live-dot">● LIVE <span id="tick">30</span>s</small>{% endblock %}
 {% block content %}
-{% if kw.mock_on_live %}<div class="flash danger">⚠ 실제 상점에 연결되어 있지만 검색어 순위와 연관검색어는 아직 <b>모의(가짜) 데이터</b>입니다.
-  쿠팡 Open API에는 검색어 조회 기능이 없습니다. 실제 검색어 수집 방법을 정한 뒤 바뀝니다.</div>{% endif %}
-<div class="flash danger" id="kw-error" role="alert" {{ '' if kw.error else 'hidden' }}>{{ kw.error or '' }}</div>
+{% if mock_on_live %}<div class="flash danger">⚠ 지금은 <b>모의(가짜) 검색어</b>입니다 (설정 <code>keyword_provider</code> = mock). 실제 상점과는 무관한 값입니다.</div>
+{% elif mock %}<div class="flash info">모의(가짜) 검색어를 보여 주는 중입니다.</div>{% endif %}
+<div class="wtabs" id="kw-src" role="tablist" aria-label="검색어 출처">
+  {% for s in sources %}<button type="button" role="tab" data-src="{{ s.id }}" aria-selected="false">{{ s.label }}</button>{% endfor %}
+</div>
 <div class="grid2">
   <section class="card">
     <div class="alerts-head">
-      <h2>쿠팡 실시간 검색어 <span class="muted">1위 ~ 10위</span></h2>
-      <span class="muted">확인 <span id="kw-checked">{{ kw.checked }}</span></span>
+      <h2><span id="kw-t-title">실시간 검색어</span> <span class="muted">1위 ~ 10위</span></h2>
+      <span class="muted">확인 <span id="kw-checked">-</span></span>
     </div>
-    <table id="kw-table">
-      <thead><tr><th class="c">순위</th><th>검색어</th><th class="c">변동</th></tr></thead>
-      <tbody id="kw-body">
-      {% for r in kw.trending %}
-      <tr class="{{ 'top' if r.rank <= 3 }}"><td class="c rk">{{ r.rank }}</td>
-        <td><a href="{{ r.url }}" target="_blank" rel="noopener noreferrer" title="쿠팡에서 '{{ r.keyword }}' 검색">{{ r.keyword }}</a></td>
-        <td class="c"><span class="kwchg {{ r.change }}">
-          {%- if r.change == 'up' %}▲ {{ r.delta }}{% elif r.change == 'down' %}▼ {{ r.delta }}{% elif r.change == 'new' %}NEW{% else %}–{% endif -%}
-        </span></td></tr>
-      {% else %}
-      <tr><td colspan="3" class="empty">검색어 순위가 없습니다. 잠시 뒤 자동으로 다시 확인합니다.</td></tr>
-      {% endfor %}
-      </tbody>
+    <p class="kwmsg" id="kw-t-msg">불러오는 중…</p>
+    <table id="kw-table" hidden>
+      <thead><tr><th class="c">순위</th><th>검색어</th><th class="c">변동 · 검색량</th></tr></thead>
+      <tbody id="kw-body"></tbody>
     </table>
-    <p class="muted" style="margin:10px 0 0">30초마다 다시 확인합니다. 검색어를 누르면 쿠팡 검색 결과가 새 탭으로 열립니다.
-      {% if kw.mock %}지금은 <b>모의 데이터</b>입니다.{% endif %}</p>
+    <p class="muted" style="margin:10px 0 0" id="kw-foot"></p>
+    <p class="muted" style="margin:6px 0 0">30초마다 화면을 갱신합니다(출처에는 5분~30분 간격으로만 다시 묻습니다). 검색어를 누르면 그 출처의 검색 결과가 새 탭으로 열립니다.</p>
   </section>
   <section class="card">
-    <h2>내 상품 연관검색어 <span class="muted">판매하는 상품 {{ kw.products|length }}개</span></h2>
+    <h2>내 상품 연관검색어 <span class="muted" id="kw-r-title"></span></h2>
+    <div class="flash danger" id="kw-rel-error" role="alert" hidden></div>
     <table id="kw-rel">
       <thead><tr><th>상품</th><th>연관검색어</th></tr></thead>
-      <tbody id="kw-rel-body">
-      {% for p in kw.products %}
-      <tr><td>{{ '★ ' if p.featured }}{{ p.name }}{% if not p.on_sale %}<span class="pill bad">판매중지</span>{% endif %}</td>
-        <td class="kws">{% for k in p.keywords %}<a class="chip shop" href="{{ k.url }}" target="_blank" rel="noopener noreferrer">{{ k.keyword }}</a>{% else %}<span class="muted">연관검색어 없음</span>{% endfor %}</td></tr>
-      {% else %}
-      <tr><td colspan="2" class="empty">상품이 없습니다. 쿠팡에서 <b>승인 완료</b>된 상품만 표시됩니다 (승인 전 상품은 옵션ID가 없어 조회되지 않음).</td></tr>
-      {% endfor %}
-      </tbody>
+      <tbody id="kw-rel-body"><tr><td colspan="2" class="empty">불러오는 중…</td></tr></tbody>
     </table>
-    <p class="muted" style="margin:10px 0 0">상품 이름을 바탕으로 고객이 함께 찾는 검색어입니다. 상품 등록의 <b>검색어</b> 칸에 넣을 낱말을 고를 때 참고하세요.</p>
+    <p class="muted" style="margin:10px 0 0" id="kw-r-foot"></p>
+    <p class="muted" style="margin:6px 0 0">상품 등록의 <b>검색어</b> 칸에 넣을 낱말을 고를 때 참고하세요.</p>
   </section>
 </div>
 {% endblock %}
@@ -52,38 +40,79 @@
   const el = (tag, props, ...kids) => { const n = Object.assign(document.createElement(tag), props); n.append(...kids); return n; };
   const link = (k, cls) => el('a', { className: cls || '', href: k.url, target: '_blank', rel: 'noopener noreferrer', textContent: k.keyword });
   const CHG = { up: (r) => '▲ ' + r.delta, down: (r) => '▼ ' + r.delta, new: () => 'NEW', same: () => '–' };
+  const IDS = [...document.querySelectorAll('#kw-src [data-src]')].map((b) => b.dataset.src);
+  const store = { get: () => { try { return localStorage.getItem('kwsrc'); } catch (e) { return null; } },
+                  set: (v) => { try { localStorage.setItem('kwsrc', v); } catch (e) { /* 저장 못 해도 동작 */ } } };
+  let src = IDS.includes(store.get()) ? store.get() : '{{ default_source }}', t = 30, seq = 0;
+  const empty = (cols, text) => el('tr', {}, el('td', { colspan: cols, className: 'empty', textContent: text }));
+  // 순위 칸: 줄이 있으면 표, 없으면 표를 숨기고 안내 문장만 (표 안에 긴 문장을 넣으면 머리줄이 깨진다)
+  const showTrend = (rows, msg) => {
+    $('kw-table').hidden = !rows; $('kw-t-msg').hidden = !!rows; $('kw-t-msg').textContent = msg || '';
+    $('kw-body').replaceChildren(...(rows || []));   // 줄이 없으면 비운다 (이전 출처의 낡은 줄과 비교하지 않게)
+  };
+
+  function tabs() {
+    document.querySelectorAll('#kw-src [data-src]').forEach((b) => {
+      const on = b.dataset.src === src; b.classList.toggle('on', on); b.setAttribute('aria-selected', on);
+    });
+  }
   function render(d) {
-    $('kw-error').hidden = !d.error; $('kw-error').textContent = d.error || '';
     $('kw-checked').textContent = d.checked;
+    $('kw-t-title').textContent = d.label + ' 실시간 검색어';
+    $('kw-r-title').textContent = d.label + ' 자동완성';
+    $('kw-foot').textContent = d.trend_note || '';
+    $('kw-r-foot').textContent = d.products.length ? `상품 이름에서 뽑은 낱말(예: '${d.products[0].query}')이 ${d.label}(으)로 전송되어 조회됩니다.` : '';
     if (d.trending.length) {
-      const before = Object.fromEntries([...$('kw-body').querySelectorAll('tr')].map((tr) => [tr.dataset.kw, tr.dataset.rank]));
-      $('kw-body').replaceChildren(...d.trending.map((r) => {
-        const a = link(r); a.title = `쿠팡에서 '${r.keyword}' 검색`;
-        const tr = el('tr', { className: r.rank <= 3 ? 'top' : '' },
-          el('td', { className: 'c rk', textContent: r.rank }), el('td', {}, a),
-          el('td', { className: 'c' }, el('span', { className: 'kwchg ' + r.change, textContent: (CHG[r.change] || CHG.same)(r) })));
+      const before = Object.fromEntries([...$('kw-body').querySelectorAll('tr[data-kw]')].map((tr) => [tr.dataset.kw, tr.dataset.rank]));
+      showTrend(d.trending.map((r) => {
+        const a = link(r); a.title = `${d.label}에서 '${r.keyword}' 검색`;
+        const tr = el('tr', { className: r.rank <= 3 ? 'top' : '' }, el('td', { className: 'c rk', textContent: r.rank }), el('td', {}, a),
+          el('td', { className: 'c' }, el('span', { className: 'kwchg ' + r.change, textContent: (CHG[r.change] || CHG.same)(r) }),
+            ...(r.note ? [el('span', { className: 'kwnote', textContent: r.note })] : [])));
         tr.dataset.kw = r.keyword; tr.dataset.rank = r.rank;
-        if (before[r.keyword] !== String(r.rank)) { tr.classList.add('flashrow'); setTimeout(() => tr.classList.remove('flashrow'), 600); }
+        if (Object.keys(before).length && before[r.keyword] !== String(r.rank)) { tr.classList.add('flashrow'); setTimeout(() => tr.classList.remove('flashrow'), 600); }
         return tr;
       }));
+    } else {
+      showTrend(null, d.trending_error || '검색어 순위가 없습니다. 잠시 뒤 자동으로 다시 확인합니다.');
     }
+    $('kw-rel-error').hidden = !d.related_error;
+    $('kw-rel-error').textContent = d.related_error ? `${d.label} 연관검색어를 가져오지 못했습니다: ${d.related_error}` : '';
     if (d.products.length) {
       $('kw-rel-body').replaceChildren(...d.products.map((p) => {
         const name = el('td', { textContent: (p.featured ? '★ ' : '') + p.name });
         if (!p.on_sale) name.append(el('span', { className: 'pill bad', textContent: '판매중지' }));
         const kws = el('td', { className: 'kws' });
-        kws.append(...(p.keywords.length ? p.keywords.map((k) => link(k, 'chip shop')) : [el('span', { className: 'muted', textContent: '연관검색어 없음' })]));
+        kws.append(...(p.keywords.length ? p.keywords.map((k) => link(k, 'chip shop'))
+          : [el('span', { className: 'muted', textContent: p.error ? '가져오지 못함' : '연관검색어 없음', title: p.error || '' })]));
         return el('tr', {}, name, kws);
       }));
+    } else {
+      $('kw-rel-body').replaceChildren(empty(2, '상품이 없습니다. 쿠팡에서 승인 완료된 상품만 표시됩니다 (승인 전 상품은 옵션ID가 없어 조회되지 않음).'));
     }
   }
-  $('kw-body').querySelectorAll('tr').forEach((tr) => { const a = tr.querySelector('a'); if (a) { tr.dataset.kw = a.textContent; tr.dataset.rank = tr.querySelector('.rk').textContent; } });
-  let t = 30;
-  setInterval(async () => {
+  async function load() {
+    const mine = src, n = ++seq;
+    try {
+      const r = await fetch('/api/keywords?source=' + encodeURIComponent(mine), { cache: 'no-store' });
+      if (!r.ok) throw new Error(r.status);
+      const d = await r.json();
+      if (n === seq && mine === src) render(d);   // 탭을 바꾼 뒤 늦게 온 응답은 버린다
+    } catch (e) {
+      if (n === seq) showTrend(null, '검색어를 불러오지 못했습니다. 잠시 뒤 다시 시도합니다.');
+    }
+  }
+  $('kw-src').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-src]'); if (!b || b.dataset.src === src) return;
+    src = b.dataset.src; store.set(src); tabs(); t = 30;
+    showTrend(null, '불러오는 중…'); $('kw-rel-body').replaceChildren(empty(2, '불러오는 중…'));
+    load();
+  });
+  tabs(); load();
+  setInterval(() => {
     t -= 1; $('tick').textContent = t;
     if (t > 0) return; t = 30;
-    if (document.hidden) return;
-    try { const r = await fetch('/api/keywords', { cache: 'no-store' }); if (r.ok) render(await r.json()); } catch (e) { /* 다음 차례에 다시 */ }
+    if (!document.hidden) load();
   }, 1000);
 })();
 </script>
