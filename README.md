@@ -17,18 +17,14 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 ## Docker (모든 플랫폼)
 `docker compose up -d` → http://<IP>:26118. 이미지 `ghcr.io/angelcom11/cupang-agent` (linux/amd64 · arm64 · arm/v7),
 데이터는 `/data` 볼륨. 자세한 방법은 [DOCKER.md](DOCKER.md).
-- 새 버전 태그(`vX.Y.Z`)를 올리면 GitHub Actions(`.github/workflows/docker.yml`)가 실행 확인 후 이미지를 올립니다 (`:버전`, `:latest`).
-
-## 포터블 버전 (Windows · macOS · Linux)
-설치 없이 실행 파일 하나로 쓰는 버전입니다. **GitHub Releases** 에서 내 컴퓨터에 맞는 zip을 받으세요.
-사용법은 [PORTABLE.md](PORTABLE.md) 에 있습니다.
-
-- 데이터는 실행 파일 옆 `WING-data/` 폴더에 저장됩니다 (`config.json` · `wing.db` · `uploads/`).
-- 기본은 이 컴퓨터에서만 접속(127.0.0.1). `--lan` 을 붙이면 같은 네트워크의 휴대폰에서도 접속할 수 있습니다.
 - 새 버전 배포: `version.py` 의 VERSION 을 올리고 `git tag vX.Y.Z && git push origin vX.Y.Z`
-  → GitHub Actions(`.github/workflows/portable.yml`)가 5종(windows-x64, macos-arm64, macos-x64, linux-x64, linux-arm64)을
-  빌드·실행 확인한 뒤 Releases 에 올립니다.
-- 직접 빌드: `pip install pyinstaller && python build_portable.py` (지금 OS용만 만들어집니다).
+  → GitHub Actions(`.github/workflows/docker.yml`)가 실행 확인 후 이미지를 올립니다 (`:버전`, `:latest`). 배포는 Docker 이미지뿐입니다.
+
+## 포터블 버전 (v0.8.1 부터 배포 중단)
+설치 없이 쓰던 포터블 실행 파일(zip)은 **v0.8.1 부터 만들지 않습니다.** 새 버전은 위의 Docker 이미지로만 배포합니다.
+마지막 포터블 배포는 [v0.7.3](https://github.com/angelcom11/cupang-agent/releases/tag/v0.7.3) 이고, 옛 사용법은 [PORTABLE.md](PORTABLE.md) 에 남겨 두었습니다.
+소스를 직접 받아 쓰려면 위의 **실행**(`python app.py`)을 따르세요. `portable.py`/`build_portable.py` 는 코드에 남아 있지만
+(`portable.py` 는 Docker 이미지의 실행 명령이 씁니다) 자동 빌드·릴리스는 없습니다.
 
 ## 설정 한눈에 보기
 설정 화면(`/settings`)의 항목과 저장 위치입니다. **비밀값은 GitHub 에 올라가지 않습니다** (`.gitignore`).
@@ -46,7 +42,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 - 키 이름과 기본값 예시: [`config.example.json`](config.example.json) (복사해서 `config.json` 으로 써도 되고, 설정 화면에서 입력해도 됩니다).
 - 옮기기·백업: `config.json`, `.env`, `wing.db`, `categories.json`, `uploads/` 를 함께 복사하면 그대로 이어서 씁니다
-  (포터블은 `WING-data/` 폴더 하나).
+  (Docker 는 `/data` 볼륨 하나).
 - 비밀번호를 잊으면 `.env` 에서 `WING_LOGIN_` 으로 시작하는 줄을 지우고 다시 실행 → 계정 다시 만들기.
 
 ## 로그인
@@ -102,7 +98,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 | `notifier.py` | 텔레그램 알림 (주제·빈도·시간대) |
 | `health.py` | 메뉴바 연결 상태 |
 | `product_form.py`, `rocket_growth.py`, `categories.py` | 상품 등록 양식·로켓그로스·카테고리 |
-| `portable.py`, `build_portable.py` | 포터블 실행기·빌드 |
+| `portable.py`, `build_portable.py` | 실행기(Docker 이미지의 실행 명령이 씀) · 포터블 직접 빌드(자동 빌드·배포는 안 함) |
 | `gen_dark_css.py` | `style.css` → `static/dark.css` (다크 모드) |
 
 ## 주의
