@@ -20,7 +20,7 @@ jobs:
           - { os: windows-latest, name: windows-x64 }
           - { os: ubuntu-22.04, name: linux-x64 }        # glibc 2.35: 오래된 리눅스에서도 실행되도록 낮은 버전에서 빌드
           - { os: ubuntu-22.04-arm, name: linux-arm64 }
-          - { os: macos-14, name: macos-arm64 }          # M1~M4
+          - { os: macos-15, name: macos-arm64 }          # M1~M4 (macos-14 는 GitHub 가 지원을 끊어 v0.8.0 에서 취소됨)
           - { os: macos-15-intel, name: macos-x64 }      # 인텔 Mac
     runs-on: ${{ matrix.os }}
     defaults:
