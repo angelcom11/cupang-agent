@@ -109,6 +109,7 @@ MANUAL = """/* 수동 보정 */
 :root[data-theme=dark] button.danger-btn,:root[data-theme=dark] .loginbox button,:root[data-theme=dark] .stepper button.on b{color:#fff}
 :root[data-theme=dark] :where(button):hover{background:#d8dce2}
 :root[data-theme=dark] button.ghost:hover,:root[data-theme=dark] .navout button:hover{background:var(--surface-2)}
+:root[data-theme=dark] .wtabs button:hover{background:none;color:var(--ink)}
 :root[data-theme=dark] button.danger-btn:hover{background:#dc2626}
 :root[data-theme=dark] a.ghostlink,:root[data-theme=dark] label.ghostlink{color:var(--ink)!important}
 :root[data-theme=dark] .star.on{color:#f59e0b}

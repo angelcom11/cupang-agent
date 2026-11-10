@@ -312,6 +312,17 @@
 :where(:root[data-theme=dark]) a.chip.shop:hover{background:var(--accent-soft);border-color:var(--accent)}
 :where(:root[data-theme=dark]) button.chip.noshop{color:var(--text-2);background:var(--surface-2);border:1px dashed var(--field)}
 :where(:root[data-theme=dark]) button.chip.noshop:hover{background:var(--surface-2);border-color:var(--accent);color:var(--accent-ink)}
+:where(:root[data-theme=dark]) .kwmsg{color:var(--text-3)}
+:where(:root[data-theme=dark]) .kwnote{color:var(--text-3)}
+:where(:root[data-theme=dark]) #kw-table td.rk{color:var(--ink)}
+:where(:root[data-theme=dark]) #kw-table tr.top td.rk{color:var(--accent-ink)}
+:where(:root[data-theme=dark]) #kw-table td a,:where(:root[data-theme=dark]) #kw-rel td:first-child{color:var(--ink)}
+:where(:root[data-theme=dark]) #kw-table td a:hover{color:var(--accent-ink)}
+:where(:root[data-theme=dark]) .kwchg{color:var(--text-3)}
+:where(:root[data-theme=dark]) .kwchg.up{color:var(--bad)}
+:where(:root[data-theme=dark]) .kwchg.down{color:var(--info)}
+:where(:root[data-theme=dark]) .kwchg.new{color:var(--accent-ink)}
+@media(max-width:760px){:where(:root[data-theme=dark]) #kw-rel tr{border-bottom:1px solid var(--line-soft)}}
 /* 수동 보정 */
 :root[data-theme=dark] .wysiwyg{background:var(--surface)}
 :root[data-theme=dark] .editor,:root[data-theme=dark] textarea.src{background:#fff;color:#111827;color-scheme:light}
@@ -321,6 +332,7 @@
 :root[data-theme=dark] button.danger-btn,:root[data-theme=dark] .loginbox button,:root[data-theme=dark] .stepper button.on b{color:#fff}
 :root[data-theme=dark] :where(button):hover{background:#d8dce2}
 :root[data-theme=dark] button.ghost:hover,:root[data-theme=dark] .navout button:hover{background:var(--surface-2)}
+:root[data-theme=dark] .wtabs button:hover{background:none;color:var(--ink)}
 :root[data-theme=dark] button.danger-btn:hover{background:#dc2626}
 :root[data-theme=dark] a.ghostlink,:root[data-theme=dark] label.ghostlink{color:var(--ink)!important}
 :root[data-theme=dark] .star.on{color:#f59e0b}
