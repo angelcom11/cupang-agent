@@ -27,7 +27,7 @@ jobs:
           for i in $(seq 1 40); do curl -sf http://127.0.0.1:26118/api/ping && break; sleep 1; done
           code=$(docker logs wing 2>&1 | grep -o "설정 코드: [0-9A-F]*" | tail -1 | awk '{print $3}')
           curl -s -c jar -b jar -o /dev/null -d "code=$code&user=ci-check&password=ci-check-pass1&confirm=ci-check-pass1" http://127.0.0.1:26118/setup
-          for u in / /inventory /prices /register /settings /static/dark.css; do
+          for u in / /inventory /prices /keywords /register /settings /static/dark.css; do
             c=$(curl -s -b jar -o /dev/null -w "%{http_code}" "http://127.0.0.1:26118$u"); echo "$c $u"; [ "$c" = 200 ]
           done
           docker logs wing | tail -20
