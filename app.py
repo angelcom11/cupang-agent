@@ -27,6 +27,7 @@ import reg_status
 import competitor_shop
 import draft_export
 import health
+import keywords
 import product_form as pf
 import rocket_growth
 from product_form import build_product_payload, product_names, validate_form
@@ -69,6 +70,8 @@ cfg = load_config()
 client = make_client(cfg)
 # 경쟁사 가격: 쿠팡 Open API에는 타 판매자 가격 조회 API가 없어서 공급자를 교체 가능하게 분리했다.
 competitor = MockCompetitorProvider()
+# 검색어 순위·연관검색어도 Open API에 없어서 같은 방식으로 분리했다 (keywords.py).
+keyword_provider = keywords.MockKeywordProvider()
 store = Store(str(DATA_DIR / "wing.db"))
 categories = CategoryStore(DATA_DIR / "categories.json")
 sync = SyncService(client, store, competitor, cfg)
@@ -213,6 +216,25 @@ def delete_items():
 @app.route("/prices")
 def prices():
     return render_template("prices.html", rows=_price_rows())
+
+
+def _keyword_data() -> dict:
+    """실시간 검색어 화면 내용. 공급자가 실패하면 빈 목록 + 오류 문구 (화면은 그대로 뜬다)."""
+    mock = getattr(keyword_provider, "name", "") == "mock"
+    out = {"trending": [], "products": [], "error": None, "mock": mock, "mock_on_live": mock and client.mode == "live",
+           "checked": datetime.now().strftime("%H:%M:%S")}
+    try:
+        out["trending"] = keywords.trending_rows(keyword_provider)
+    except Exception as exc:  # noqa: BLE001 — 바깥 공급자의 어떤 오류든 화면에 알린다
+        log.warning("검색어 순위 조회 실패: %s", exc)
+        out["error"] = f"검색어 순위를 불러오지 못했습니다: {exc}"
+    out["products"] = keywords.product_rows(keyword_provider, store.items())
+    return out
+
+
+@app.route("/keywords")
+def keyword_page():
+    return render_template("keywords.html", kw=_keyword_data())
 
 
 @app.route("/prices/rule", methods=["POST"])
@@ -733,6 +755,11 @@ def api_prices():
     for r in rows:
         r.pop("history", None)
     return jsonify({"last_sync": sync.last_sync, "rows": rows})
+
+
+@app.route("/api/keywords")
+def api_keywords():
+    return jsonify(_keyword_data())
 
 
 @app.route("/api/competitor-shop", methods=["POST"])
