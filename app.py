@@ -70,7 +70,7 @@ cfg = load_config()
 client = make_client(cfg)
 # 경쟁사 가격: 쿠팡 Open API에는 타 판매자 가격 조회 API가 없어서 공급자를 교체 가능하게 분리했다.
 competitor = MockCompetitorProvider()
-# 검색어 순위·연관검색어도 Open API에 없어서 같은 방식으로 분리했다 (keywords.py). 기본은 구글·네이버·다음·쿠팡에 실제로 묻는다.
+# 연관검색어도 Open API에 없어서 같은 방식으로 분리했다 (keywords.py). 기본은 구글·네이버·다음·쿠팡에 실제로 묻는다.
 keyword_provider = (keywords.MockKeywordProvider()
                     if os.environ.get("WING_KEYWORDS") == "mock" or cfg.get("keyword_provider") == "mock"
                     else keywords.LiveKeywordProvider())
@@ -221,22 +221,12 @@ def prices():
 
 
 def _keyword_data(source: str) -> dict:
-    """실시간 검색어 화면 내용 (출처 하나). 출처가 실패해도 오류 문구와 함께 화면은 그대로 뜬다."""
+    """실시간 검색어 화면 내용 (출처 하나): 내 상품별 연관검색어. 출처가 실패해도 오류 문구와 함께 화면은 그대로 뜬다."""
     if source not in keywords.SOURCES:
         source = keywords.DEFAULT_SOURCE
-    label = keywords.SOURCES[source][0]
     mock = getattr(keyword_provider, "name", "") == "mock"
-    out = {"source": source, "label": label, "mock": mock, "mock_on_live": mock and client.mode == "live",
-           "trending": [], "trending_error": None, "trending_unavailable": False,
-           "trend_note": keywords.TREND_NOTE.get(source, ""), "products": [], "related_error": None,
-           "checked": datetime.now().strftime("%H:%M:%S")}
-    try:
-        out["trending"] = keywords.trending_rows(keyword_provider, source)
-    except keywords.SourceUnavailable as exc:
-        out["trending_error"], out["trending_unavailable"] = str(exc), True
-    except Exception as exc:  # noqa: BLE001 — 바깥 출처의 어떤 오류든 화면에 알린다
-        log.warning("%s 검색어 순위 조회 실패: %s", label, exc)
-        out["trending_error"] = f"{label} 검색어 순위를 불러오지 못했습니다: {exc}"
+    out = {"source": source, "label": keywords.SOURCES[source][0], "mock": mock, "mock_on_live": mock and client.mode == "live",
+           "products": [], "related_error": None, "checked": datetime.now().strftime("%H:%M:%S")}
     out["products"], out["related_error"] = keywords.product_rows(keyword_provider, store.items(), source)
     return out
 

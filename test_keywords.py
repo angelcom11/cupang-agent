@@ -1,4 +1,4 @@
-"""실시간 검색어: 출처별(구글·네이버·다음·쿠팡) 파싱, 캐시, 차단 처리, 화면·API.
+"""실시간 검색어 화면(내 상품 연관검색어): 출처별(구글·네이버·다음·쿠팡) 파싱, 캐시, 차단 처리, 화면·API.
 
 네이버·다음·구글 응답은 2026-11-10 에 직접 호출해서 받은 모양 그대로다. 쿠팡은 서버에서 403 이라 응답 모양을 확인하지 못했다 —
 그래서 쿠팡은 '차단 알림'과 '모양을 모를 때의 관대한 해석'만 시험한다 (실제 응답에서 맞는지는 시험하지 않았다).
@@ -14,12 +14,6 @@ import keywords
 NAVER = '{"query":["텀블러"],"answer":[],"intend":[],"items":[[["텀블러","0"],["스텐텀블러","0"],["텀블러탈퇴","0"],["보온보냉텀블러","0"]]]}'
 DAUM = '{"q":"텀블러","subkeys":["텀블러","텀블러 세척방법","텀블러 추천","스타벅스 텀블러"],"highlighted":[]}'
 GOOGLE = '["텀블러",["텀블러","텀블러 세척법","텀블러 추천","텀블러 브랜드"],[],{}]'
-
-
-def rss(words):
-    items = "".join(f"<item><title>{w}</title><ht:approx_traffic>{(i + 1) * 100}+</ht:approx_traffic></item>" for i, w in enumerate(words))
-    return ('<?xml version="1.0" encoding="UTF-8"?><rss xmlns:ht="https://trends.google.com/trending/rss" version="2.0">'
-            f"<channel><title>Daily Search Trends</title>{items}</channel></rss>")
 
 
 class Resp:
@@ -51,19 +45,13 @@ def live(**by_host):
     return keywords.LiveKeywordProvider(get=net), net
 
 
-WORDS12 = [f"검색어{i}" for i in range(1, 13)]
-
-
 # ---------- 연관검색어 (자동완성) ----------
 def test_related_parses_naver_daum_google_and_drops_the_query_itself():
     assert keywords.base_keyword("스테인리스 텀블러 500ml") == "스테인리스 텀블러"
     # 검색어와 같은 항목(공백·대소문자 무시)은 빼고, 최대 8개
-    p2, _ = live(naver=Resp(NAVER))
-    assert p2.related("텀블러 500ml", "naver") == ["스텐텀블러", "텀블러탈퇴", "보온보냉텀블러"]
-    p3, _ = live(daum=Resp(DAUM))
-    assert p3.related("텀블러", "daum") == ["텀블러 세척방법", "텀블러 추천", "스타벅스 텀블러"]
-    p4, _ = live(google=Resp(GOOGLE))
-    assert p4.related("텀블러", "google") == ["텀블러 세척법", "텀블러 추천", "텀블러 브랜드"]
+    assert live(naver=Resp(NAVER))[0].related("텀블러 500ml", "naver") == ["스텐텀블러", "텀블러탈퇴", "보온보냉텀블러"]
+    assert live(daum=Resp(DAUM))[0].related("텀블러", "daum") == ["텀블러 세척방법", "텀블러 추천", "스타벅스 텀블러"]
+    assert live(google=Resp(GOOGLE))[0].related("텀블러", "google") == ["텀블러 세척법", "텀블러 추천", "텀블러 브랜드"]
     many = json.dumps(["텀블러", [f"텀블러 {i}" for i in range(20)], [], {}], ensure_ascii=False)
     assert len(live(google=Resp(many))[0].related("텀블러", "google")) == keywords.RELATED_N
 
@@ -128,42 +116,11 @@ def test_coupang_tolerant_parse_and_unknown_shape():   # 응답 모양은 가정
         odd.related("텀블러", "coupang")
 
 
-# ---------- 인기 검색어 순위 ----------
-def test_google_trending_top10_with_traffic_and_rank_changes():
-    state = {"body": rss(WORDS12)}
-    net = Net(**{"trends.google.com": lambda: Resp(state["body"])})
-    p = keywords.LiveKeywordProvider(get=net, ttl_trending=0)
-    first = keywords.trending_rows(p, "google")
-    assert [r["rank"] for r in first] == list(range(1, 11)) and first[0]["keyword"] == "검색어1" and first[0]["note"] == "검색 100+"
-    assert {r["change"] for r in first} == {"same"}                     # 처음엔 비교할 순위가 없다
-    assert first[0]["url"].startswith("https://www.google.com/search?q=")
-    state["body"] = rss(["검색어3", "검색어1", "새검색어"] + WORDS12[3:])  # 3이 1위로, 1이 2위로, 2는 탈락, 새 항목 진입
-    second = {r["keyword"]: r for r in keywords.trending_rows(p, "google")}
-    assert second["검색어3"]["change"] == "up" and second["검색어3"]["delta"] == 2
-    assert second["검색어1"]["change"] == "down" and second["검색어1"]["delta"] == 1
-    assert second["새검색어"]["change"] == "new" and "검색어2" not in second
-    assert second["검색어4"]["change"] == "same"
-
-
-def test_trending_cached_and_xml_attack_and_empty_feed_rejected():
-    p, net = live(**{"trends.google.com": Resp(rss(WORDS12))})
-    p.trending("google"); p.trending("google")
-    assert net.count("trends.google.com") == 1
-    evil = '<?xml version="1.0"?><!DOCTYPE x [<!ENTITY a "aaaa">]><rss><channel><item><title>&a;</title></item></channel></rss>'
-    with pytest.raises(keywords.SourceError, match="형식"):
-        live(**{"trends.google.com": Resp(evil)})[0].trending("google")
-    with pytest.raises(keywords.SourceError, match="비어"):
-        live(**{"trends.google.com": Resp(rss([]))})[0].trending("google")
-    with pytest.raises(keywords.SourceError, match="XML"):
-        live(**{"trends.google.com": Resp("<rss>")})[0].trending("google")
-
-
-def test_naver_daum_coupang_have_no_trending_and_say_why():
-    p, net = live()
-    for src, word in (("naver", "종료"), ("daum", "종료"), ("coupang", "공개 API")):
-        with pytest.raises(keywords.SourceUnavailable, match=word):
-            p.trending(src)
-    assert net.calls == []                                               # 없는 기능을 괜히 두드리지 않는다
+def test_no_ranking_api_is_left():
+    """순위 화면은 없앴다: 공급자·화면 어디에도 trending 이 남아 있지 않다."""
+    for provider in (keywords.LiveKeywordProvider(get=Net()), keywords.MockKeywordProvider()):
+        assert not hasattr(provider, "trending")
+    assert not hasattr(keywords, "trending_rows") and not hasattr(keywords, "TREND_NOTE")
 
 
 # ---------- 상품별 연관검색어 ----------
@@ -179,6 +136,7 @@ def test_product_rows_dedupe_isolate_failures_and_report_common_error():
     class Half:
         name = "x"
         query = staticmethod(keywords.base_keyword)
+
         def related(self, name, source):
             if "랜턴" in name:
                 raise RuntimeError("boom")
@@ -192,56 +150,47 @@ def test_product_rows_dedupe_isolate_failures_and_report_common_error():
 
 
 # ---------- 화면 · API ----------
-def test_page_has_menu_and_four_source_tabs(monkeypatch):
+def test_page_has_menu_and_four_source_tabs_and_no_ranking():
     c = A.app.test_client()
     html = c.get("/keywords").get_data(as_text=True)
-    assert 'href="/keywords" class="on"' in html
+    assert 'href="/keywords" class="on"' in html and "내 상품 연관검색어" in html
     for sid, label in (("google", "구글"), ("naver", "네이버"), ("daum", "다음"), ("coupang", "쿠팡")):
         assert f'data-src="{sid}"' in html and label in html
-    assert html.index('data-src="google"') < html.index('data-src="coupang"')   # 순위가 나오는 구글이 맨 앞
-    assert 'href="/keywords" class=""' in c.get("/").get_data(as_text=True)
-    assert "모의(가짜) 검색어를 보여 주는 중" in html                          # 테스트는 모의 공급자
+    assert html.index('data-src="google"') < html.index('data-src="coupang"')   # 실제로 나오는 구글이 맨 앞
+    assert 'id="kw-table"' not in html and "1위" not in html and "LIVE" not in html   # 순위 칸·자동 갱신 표시는 없다
+    assert 'href="/keywords" class=""' in c.get("/").get_data(as_text=True)         # 다른 화면에도 메뉴가 있다
+    assert "모의(가짜) 검색어를 보여 주는 중" in html                              # 테스트는 모의 공급자
 
 
 def test_api_with_live_provider_per_source(monkeypatch):
     A.sync.run_once()
-    net = Net(**{"trends.google.com": Resp(rss(WORDS12)), "google.com/complete": Resp(GOOGLE), "naver": Resp(NAVER),
-                 "daum": Resp(DAUM), "coupang": Resp("Access Denied", 403)})
+    net = Net(**{"google.com/complete": Resp(GOOGLE), "naver": Resp(NAVER), "daum": Resp(DAUM), "coupang": Resp("Access Denied", 403)})
     monkeypatch.setattr(A, "keyword_provider", keywords.LiveKeywordProvider(get=net))
     c = A.app.test_client()
     names = {i["name"] for i in A.store.items()}
-    g = c.get("/api/keywords?source=google").get_json()
-    assert g["source"] == "google" and not g["mock"] and g["trend_note"]
-    assert [r["rank"] for r in g["trending"]] == list(range(1, 11)) and g["trending_error"] is None
-    assert {p["name"] for p in g["products"]} == names and all(p["keywords"] for p in g["products"]) and g["related_error"] is None
-
-    n = c.get("/api/keywords?source=naver").get_json()               # 순위 없음(종료) + 자동완성은 됨
-    assert n["trending"] == [] and n["trending_unavailable"] and "종료" in n["trending_error"]
-    assert all(p["keywords"] for p in n["products"]) and n["related_error"] is None
-    d = c.get("/api/keywords?source=daum").get_json()
-    assert d["trending_unavailable"] and all(k["url"].startswith("https://search.daum.net/") for p in d["products"] for k in p["keywords"])
-
-    k = c.get("/api/keywords?source=coupang").get_json()             # 쿠팡: 순위 API 없음 + 자동완성 접속 거부
-    assert k["trending_unavailable"] and "공개 API" in k["trending_error"]
-    assert "403" in k["related_error"] and all(p["keywords"] == [] for p in k["products"])
+    for src, host in (("google", "https://www.google.com/"), ("naver", "https://search.naver.com/"), ("daum", "https://search.daum.net/")):
+        d = c.get(f"/api/keywords?source={src}").get_json()
+        assert d["source"] == src and not d["mock"] and d["related_error"] is None
+        assert "trending" not in d and "trend_note" not in d
+        assert {p["name"] for p in d["products"]} == names and all(p["keywords"] for p in d["products"])
+        assert all(k["url"].startswith(host) for p in d["products"] for k in p["keywords"])
+    k = c.get("/api/keywords?source=coupang").get_json()             # 쿠팡: 자동완성 접속 거부
+    assert "403" in k["related_error"] and all(p["keywords"] == [] and p["error"] for p in k["products"])
     assert net.count("coupang") == 1                                 # 막힌 출처는 상품마다 다시 두드리지 않는다
-
     assert c.get("/api/keywords?source=nope").get_json()["source"] == "google"   # 모르는 출처는 기본(구글)
 
 
 def test_page_still_works_when_a_source_breaks(monkeypatch):
     A.sync.run_once()
-    monkeypatch.setattr(A, "keyword_provider", keywords.LiveKeywordProvider(get=Net(**{"trends.google.com": requests.ConnectTimeout("t"), "google.com/complete": requests.ConnectTimeout("t")})))
+    monkeypatch.setattr(A, "keyword_provider", keywords.LiveKeywordProvider(get=Net(**{"google.com/complete": requests.ConnectTimeout("t")})))
     c = A.app.test_client()
     assert c.get("/keywords").status_code == 200
     d = c.get("/api/keywords?source=google").get_json()
-    assert d["trending"] == [] and "구글 검색어 순위를 불러오지 못했습니다" in d["trending_error"] and not d["trending_unavailable"]
-    assert "연결하지 못했습니다" in d["related_error"] and d["products"]
+    assert "연결하지 못했습니다" in d["related_error"] and d["products"] and all(p["keywords"] == [] for p in d["products"])
 
 
-def test_mock_provider_still_ranks_1_to_10():
+def test_mock_provider_gives_related_words_for_every_source():
     p = keywords.MockKeywordProvider()
-    rows = p.trending("google", now=1_000_000)
-    assert [r["rank"] for r in rows] == list(range(1, 11)) and len({r["keyword"] for r in rows}) == 10
-    assert rows == p.trending("naver", now=1_000_005)
-    assert len({tuple(r["keyword"] for r in p.trending("google", now=1_000_000 + 60 * k)) for k in range(30)}) > 1
+    words = p.related("대나무 도마 화이트 2P", "naver")
+    assert words and all(w.startswith("대나무 도마 ") for w in words) and len(words) <= keywords.RELATED_N
+    assert words == p.related("대나무 도마 화이트 2P", "coupang") and p.related("", "google") == []

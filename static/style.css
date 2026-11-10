@@ -625,14 +625,9 @@ td.comps{min-width:14em}
 .dr-actions{margin-top:0}.dr-actions #dr-submit{margin-left:auto}
 .dr-note{margin:8px 0 0;font-size:12px}
 #draft-form th{white-space:nowrap}#draft-form td.mono{white-space:nowrap}
-/* 실시간 검색어 */
-#kw-src{margin-bottom:16px}.kwmsg{margin:0;padding:28px 12px;text-align:center;color:var(--text-3);word-break:keep-all}#kw-table th{white-space:nowrap}.kwnote{white-space:nowrap;margin-left:6px;font-size:12px;font-weight:400;color:var(--text-3);font-variant-numeric:tabular-nums}#kw-table td.rk{width:4em;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
-#kw-table tr.top td.rk{color:var(--accent-ink)}
-#kw-table td a,#kw-rel td:first-child{color:var(--ink);font-weight:600}
-#kw-table td a{text-decoration:none}#kw-table td a:hover{color:var(--accent-ink);text-decoration:underline}
-.kwchg{display:inline-block;min-width:3.2em;text-align:center;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--text-3)}
-.kwchg.up{color:var(--bad)}.kwchg.down{color:var(--info)}.kwchg.new{color:var(--accent-ink)}
-#kw-rel td:first-child{min-width:11em;vertical-align:top}#kw-rel td.kws{min-width:14em}
+/* 실시간 검색어 (내 상품 연관검색어) */
+#kw-src{margin-bottom:16px}
+#kw-rel td:first-child{min-width:11em;vertical-align:top;color:var(--ink);font-weight:600}#kw-rel td.kws{min-width:14em}
 #kw-rel .pill{margin-left:6px}
-@media(max-width:760px){#kw-table,#kw-rel{min-width:0!important}#kw-rel tr:has(th){display:none}
+@media(max-width:760px){#kw-rel{min-width:0!important}#kw-rel tr:has(th){display:none}
   #kw-rel tr{display:block;padding:8px 0;border-bottom:1px solid var(--line-soft)}#kw-rel td{display:block;border:0;padding:2px 6px}}
