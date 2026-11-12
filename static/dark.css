@@ -21,6 +21,7 @@
 :where(:root[data-theme=dark]) .mono{color:var(--text-2)}
 :where(:root[data-theme=dark]) tr.warn{background:#221f13}
 :where(:root[data-theme=dark]) tr.danger{background:#1e1111}
+:where(:root[data-theme=dark]) #inv-table tr:target{background:#201a13;box-shadow:inset 3px 0 0 #fa8b3e}
 :where(:root[data-theme=dark]) .pill.good{background:#192b1f;color:#98d8b1}
 :where(:root[data-theme=dark]) .pill.bad{background:#271616;color:#bc2121}
 :where(:root[data-theme=dark]) td.good{color:#1bc75a}
@@ -42,6 +43,8 @@
 :where(:root[data-theme=dark]) .live-dot{color:#f26a6a}
 :where(:root[data-theme=dark]) .flashrow{background:#12181f}
 :where(:root[data-theme=dark]) .fcard{border:1px solid var(--line);border-left:4px solid #fa8b3e}
+:where(:root[data-theme=dark]) a.fcard:hover{border-color:#fa8b3e}
+:where(:root[data-theme=dark]) a.fcard:focus-visible{outline:2px solid #fa8b3e}
 :where(:root[data-theme=dark]) .fcard.off{border-left-color:#f26a6a;background:#1e1111}
 :where(:root[data-theme=dark]) .fcard dt{color:var(--text-2)}
 :where(:root[data-theme=dark]) .fcard dd.bad{color:#e24949}

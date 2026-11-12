@@ -19,7 +19,7 @@
         <th>재고 변경</th><th>부족 알림 기준</th><th></th></tr>
     {% for i in items %}
     {% set fid = 'f' ~ i.vendor_item_id %}
-    <tr data-vid="{{ i.vendor_item_id }}" data-spid="{{ i.seller_product_id }}" data-name="{{ i.name }}"
+    <tr id="item-{{ i.vendor_item_id }}" data-vid="{{ i.vendor_item_id }}" data-spid="{{ i.seller_product_id }}" data-name="{{ i.name }}"
         data-onsale="{{ 1 if i.on_sale else 0 }}" data-status="{{ i.status }}"
         class="{{ 'danger' if not i.on_sale else ('warn' if i.stock <= i.low_stock else '') }}">
       <td class="c"><input type="checkbox" class="row-chk" value="{{ i.seller_product_id }}" aria-label="{{ i.name }} 선택"></td>
