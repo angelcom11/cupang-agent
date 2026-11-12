@@ -808,6 +808,28 @@ def api_inventory():
     return jsonify({"last_sync": sync.last_sync, "error": sync.last_error, "items": store.items()})
 
 
+# ---------------- 새 화면 (React + Astryx) ----------------
+# 전환 중에는 /ui 에서만 띄운다. 기존 Jinja 화면은 그대로 두고, 7개 화면을 다 옮긴 뒤
+# 루트를 이쪽으로 넘긴다. 번들은 web/ 에서 `npm run build` 로 static/dist 에 만든다.
+# 번들은 코드와 함께 배포되므로 BASE(소스 폴더) 기준이다 — DATA_DIR(사용자 데이터)이 아니다.
+SPA_DIR = BASE / "static" / "dist"
+
+
+@app.route("/ui")
+@app.route("/ui/<path:_rest>")
+def spa(_rest: str = ""):
+    """SPA 진입점. 경로는 브라우저 라우터가 처리하므로 어떤 하위 경로든 index.html 을 준다."""
+    index = SPA_DIR / "index.html"
+    if not index.exists():
+        return (
+            "<h1>새 화면이 아직 빌드되지 않았습니다</h1>"
+            "<p><code>cd web &amp;&amp; npm install &amp;&amp; npm run build</code> 를 실행하세요.</p>"
+            '<p><a href="/">기존 화면으로</a></p>',
+            503,
+        )
+    return send_from_directory(SPA_DIR, "index.html")
+
+
 @app.route("/api/ping")
 def api_ping():  # 포터블 실행기가 '이미 실행 중'인지 확인하는 용도
     from version import VERSION

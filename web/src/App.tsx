@@ -76,8 +76,9 @@ function Shell() {
 
 export default function App() {
   return (
-    // Flask 가 /static/dist/ 로 서빙하므로 라우터 기준 경로를 맞춘다.
-    <BrowserRouter basename={import.meta.env.BASE_URL}>
+    // Flask 가 /ui 에서 이 SPA 를 띄운다 (자산은 /static/dist/ 에서 받는다).
+    // 7개 화면을 다 옮기면 루트로 옮긴다.
+    <BrowserRouter basename="/ui">
       <Shell />
     </BrowserRouter>
   );

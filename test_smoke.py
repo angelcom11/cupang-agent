@@ -112,3 +112,28 @@ def test_pages_and_register():
     r = c.post("/register", data={"action": "csv", "csv_file": (io.BytesIO(csv), "s.csv")},
                content_type="multipart/form-data", follow_redirects=True)
     assert "성공 2건 / 실패 1건" in r.get_data(as_text=True)
+
+
+# ---------- 새 화면(React + Astryx) 서빙 ----------
+def test_spa_is_served_at_ui_and_still_needs_login():
+    """새 화면은 /ui 에서 뜨고, 기존 화면과 같은 로그인 가드를 받는다."""
+    c = A.app.test_client()
+    r = c.get("/ui")
+    assert r.status_code in (200, 503), f"라우트가 없으면 404 가 난다 (지금 {r.status_code})"
+
+    # 하위 경로는 브라우저 라우터가 처리하므로 서버는 같은 문서를 준다
+    assert c.get("/ui/inventory").status_code == r.status_code
+
+    # 로그인을 켜면 막혀야 한다 — 새 화면이 인증 구멍이 되면 안 된다
+    A.app.config["WING_LOGIN_REQUIRED"] = True
+    try:
+        assert c.get("/ui").status_code in (302, 401)
+    finally:
+        A.app.config["WING_LOGIN_REQUIRED"] = False
+
+
+def test_existing_pages_untouched_while_spa_coexists():
+    """전환 중에는 기존 Jinja 화면이 그대로 떠야 한다."""
+    c = A.app.test_client()
+    for path in ("/", "/inventory", "/prices", "/keywords", "/register", "/settings"):
+        assert c.get(path).status_code == 200, f"{path} 가 깨졌다"
