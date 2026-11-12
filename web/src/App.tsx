@@ -19,6 +19,7 @@ import {
 } from "@heroicons/react/24/outline";
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Inventory = lazy(() => import("./pages/Inventory"));
 
 /**
  * 메뉴 — 기존 화면과 경로·순서·이름을 맞춘다.
@@ -67,6 +68,7 @@ function Shell() {
       >
         <Routes>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/inventory" element={<Inventory />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>

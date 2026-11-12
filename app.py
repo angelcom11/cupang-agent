@@ -173,12 +173,7 @@ def inventory():
     if request.method == "POST":
         vid = request.form["vendor_item_id"]
         try:
-            if request.form.get("stock", "").strip():
-                qty = int(request.form["stock"])
-                client.update_quantity(vid, qty)
-                store.set_item_field(vid, "stock", qty)
-            store.update_rule(vid, low_stock=int(request.form.get("low_stock") or 0))
-            sync.apply_soldout_rule(store.item(vid))  # 입고로 기준 이상이 되면 바로 판매재개
+            _update_stock(vid, request.form.get("stock", ""), request.form.get("low_stock", ""))
             flash("재고 정보를 반영했습니다", "info")
         except (CoupangAPIError, ValueError) as exc:
             flash(f"실패: {exc}", "danger")
@@ -186,26 +181,54 @@ def inventory():
     return render_template("inventory.html", items=store.items())
 
 
-@app.route("/items/<vid>/featured", methods=["POST"])
-def toggle_featured(vid):
+def _toggle_featured(vid: str) -> None:
     item = store.item(vid)
     if item:
         store.update_rule(vid, featured=0 if item["featured"] else 1)
+
+
+def _item_or_fail(vid: str) -> dict:
+    """없는 옵션ID 로 들어오면 첨자 접근에서 터지지 않고 읽을 수 있는 실패를 낸다."""
+    item = store.item(vid)
+    if item is None:
+        raise ValueError("없는 상품입니다")
+    return item
+
+
+def _toggle_sale(vid: str) -> str:
+    """판매중지/재개를 쿠팡에 반영한다. 사람이 읽을 결과 문구를 돌려준다."""
+    item = _item_or_fail(vid)
+    if item["on_sale"]:
+        client.stop_sale(vid)
+    else:
+        client.resume_sale(vid)
+    store.set_item_field(vid, "on_sale", 0 if item["on_sale"] else 1)
+    store.update_rule(vid, auto_stopped=0)  # 수동 조작한 상품은 자동 재개 대상에서 뺀다
+    return f"{'판매중지' if item['on_sale'] else '판매재개'}: {item['name']}"
+
+
+def _update_stock(vid: str, stock: str, low_stock: str) -> None:
+    """재고와 부족 알림 기준을 반영한다. stock 이 빈 값이면 기준만 바꾼다."""
+    _item_or_fail(vid)
+    if stock.strip():
+        qty = int(stock)
+        client.update_quantity(vid, qty)
+        store.set_item_field(vid, "stock", qty)
+    store.update_rule(vid, low_stock=int(low_stock or 0))
+    sync.apply_soldout_rule(_item_or_fail(vid))  # 입고로 기준 이상이 되면 바로 판매재개
+
+
+@app.route("/items/<vid>/featured", methods=["POST"])
+def toggle_featured(vid):
+    _toggle_featured(vid)
     return redirect(request.referrer or url_for("inventory"))
 
 
 @app.route("/items/<vid>/sale", methods=["POST"])
 def toggle_sale(vid):
-    item = store.item(vid)
     try:
-        if item["on_sale"]:
-            client.stop_sale(vid)
-        else:
-            client.resume_sale(vid)
-        store.set_item_field(vid, "on_sale", 0 if item["on_sale"] else 1)
-        store.update_rule(vid, auto_stopped=0)  # 수동 조작한 상품은 자동 재개 대상에서 뺀다
-        flash(f"{'판매중지' if item['on_sale'] else '판매재개'}: {item['name']}", "info")
-    except CoupangAPIError as exc:
+        flash(_toggle_sale(vid), "info")
+    except (CoupangAPIError, ValueError) as exc:
         flash(f"실패: {exc}", "danger")
     return redirect(url_for("inventory"))
 
@@ -849,9 +872,72 @@ def api_dashboard():
     })
 
 
+# SQLite 는 참/거짓을 0/1 정수로 준다. 그대로 넘기면 받는 쪽이 boolean 인 줄 알고
+# 1 을 거짓으로 다룬다(React 컴포넌트가 실제로 그랬다). 경계에서 한 번 바꿔 둔다.
+_ITEM_FLAGS = ("on_sale", "featured", "auto_stopped", "auto_reprice")
+
+
+def _json_item(row: dict) -> dict:
+    return {**row, **{f: bool(row.get(f)) for f in _ITEM_FLAGS if f in row}}
+
+
 @app.route("/api/inventory")
 def api_inventory():
-    return jsonify({"last_sync": sync.last_sync, "error": sync.last_error, "items": store.items()})
+    return jsonify({
+        "last_sync": sync.last_sync,
+        "error": sync.last_error,
+        "items": [_json_item(i) for i in store.items()],
+    })
+
+
+# 새 화면(React)용 동작 경로. 몸통은 Jinja 화면과 같은 함수를 쓴다 — 한쪽만 고쳐지는 일을 막는다.
+@app.route("/api/items/<vid>/featured", methods=["POST"])
+def api_toggle_featured(vid):
+    if not store.item(vid):
+        return jsonify({"error": "없는 상품입니다"}), 404
+    _toggle_featured(vid)
+    return jsonify({"item": _json_item(_item_or_fail(vid))})
+
+
+@app.route("/api/items/<vid>/sale", methods=["POST"])
+def api_toggle_sale(vid):
+    if not store.item(vid):
+        return jsonify({"error": "없는 상품입니다"}), 404
+    try:
+        message = _toggle_sale(vid)
+    except CoupangAPIError as exc:
+        return jsonify({"error": str(exc)}), 502  # 쿠팡 쪽 실패는 우리 잘못이 아니다
+    return jsonify({"message": message, "item": _json_item(_item_or_fail(vid))})
+
+
+@app.route("/api/items/<vid>/stock", methods=["POST"])
+def api_update_stock(vid):
+    if not store.item(vid):
+        return jsonify({"error": "없는 상품입니다"}), 404
+    body = request.get_json(silent=True) or {}
+    try:
+        _update_stock(vid, str(body.get("stock", "")), str(body.get("low_stock", "")))
+    except ValueError:
+        return jsonify({"error": "재고와 기준은 숫자여야 합니다"}), 400
+    except CoupangAPIError as exc:
+        return jsonify({"error": str(exc)}), 502
+    return jsonify({"message": "재고 정보를 반영했습니다", "item": _json_item(_item_or_fail(vid))})
+
+
+@app.route("/api/items/delete", methods=["POST"])
+def api_delete_items():
+    """삭제는 되돌릴 수 없다. 기존 화면과 똑같이 '삭제' 를 받아 적게 한다."""
+    body = request.get_json(silent=True) or {}
+    spids = [str(s) for s in body.get("seller_product_id", []) if str(s).strip()]
+    if not spids:
+        return jsonify({"error": "삭제할 상품을 선택하세요"}), 400
+    if str(body.get("confirm", "")).strip() != "삭제":
+        return jsonify({"error": "확인 칸에 '삭제'를 정확히 입력해야 삭제됩니다"}), 400
+    results = [
+        {"name": name, "ok": ok, "message": msg}
+        for name, ok, msg in sync.delete_products(spids, stop_first=bool(body.get("stop_first")))
+    ]
+    return jsonify({"results": results})
 
 
 # ---------------- 새 화면 (React + Astryx) ----------------
