@@ -215,6 +215,14 @@
           <div class="tagbox" id="tagbox"><input id="tag-input" placeholder="검색어 입력 후 Enter 또는 콤마(,)"></div>
           <p class="muted"><span id="tag-count">0</span>/20 · 형태, 소재, 재질, 영문 동의어, 별칭 등 상품과 관련된 단어를 넣으세요. 상품명·카테고리도 검색에 함께 쓰입니다.</p>
         {% endcall %}
+        {% call row('추천 받기', hint='구글·네이버·다음·쿠팡') %}
+          <div class="sugbar">
+            <button type="button" class="btn" id="sug-go">상품명으로 추천</button>
+            <button type="button" class="btn" id="sug-all" hidden>전체 넣기</button>
+            <span class="muted" id="sug-note">상품명을 입력한 뒤 눌러 보세요.</span>
+          </div>
+          <div class="sugbox" id="sug-list"></div>
+        {% endcall %}
       </fieldset>
 
       <fieldset class="sec" id="s-filter"><legend>검색필터</legend>

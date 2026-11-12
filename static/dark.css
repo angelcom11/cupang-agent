@@ -133,6 +133,10 @@
 :where(:root[data-theme=dark]) .tagbox{border:1px solid var(--field)}
 :where(:root[data-theme=dark]) .tagbox .tag{background:#121620;color:#4239c3}
 :where(:root[data-theme=dark]) .tagbox .tag button{color:#7375f2}
+:where(:root[data-theme=dark]) .sugbox .sug{background:#11161b;color:var(--text);border:1px dashed var(--field)}
+:where(:root[data-theme=dark]) .sugbox .sug:hover:not(:disabled){background:#121620;color:#4239c3;border-color:#6b84fa}
+:where(:root[data-theme=dark]) .sugbox .sug.on{background:#121620;color:#4239c3}
+:where(:root[data-theme=dark]) .sugbox .sug small{color:var(--text-3)}
 :where(:root[data-theme=dark]) .imglist li{border:1px solid var(--line)}
 :where(:root[data-theme=dark]) #reg-form.wing .noticerows .wrow:first-child{border-top:1px solid var(--surface-2)}
 :where(:root[data-theme=dark]) #reg-form.wing .opttable .disc{color:#e24949}

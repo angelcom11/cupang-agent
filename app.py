@@ -763,6 +763,28 @@ def api_keywords():
     return jsonify(_keyword_data(request.args.get("source", keywords.DEFAULT_SOURCE)))
 
 
+@app.route("/api/keyword-suggest")
+def api_keyword_suggest():
+    """상품 등록 화면의 검색어 추천: 상품 이름 하나를 여러 출처에 물어 합친 최대 20개.
+
+    name     추천의 바탕이 되는 상품 이름 (필수)
+    exclude  이미 넣어 둔 검색어 (콤마로 구분) — 중복으로 추천하지 않는다
+    sources  출처 id 콤마 구분 (기본: 전체)
+    """
+    name = (request.args.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "상품 이름을 먼저 입력하세요."}), 400
+    exclude = [t.strip() for t in (request.args.get("exclude") or "").split(",") if t.strip()]
+    asked = [s.strip() for s in (request.args.get("sources") or "").split(",") if s.strip()]
+    sources = [s for s in asked if s in keywords.SOURCES] or None
+    room = max(0, keywords.MAX_TAGS - len(exclude))
+    suggestions, errors = keywords.suggest_tags(
+        keyword_provider, name, sources=sources, limit=room, exclude=exclude)
+    return jsonify({"query": keywords.base_keyword(name), "limit": keywords.MAX_TAGS, "room": room,
+                    "suggestions": suggestions, "errors": errors,
+                    "mock": getattr(keyword_provider, "name", "") == "mock"})
+
+
 @app.route("/api/competitor-shop", methods=["POST"])
 def api_competitor_shop():
     """경쟁 판매자 샵 주소 등록/삭제 (업체코드 A00012345 또는 쿠팡 주소만)."""

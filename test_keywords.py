@@ -194,3 +194,61 @@ def test_mock_provider_gives_related_words_for_every_source():
     words = p.related("대나무 도마 화이트 2P", "naver")
     assert words and all(w.startswith("대나무 도마 ") for w in words) and len(words) <= keywords.RELATED_N
     assert words == p.related("대나무 도마 화이트 2P", "coupang") and p.related("", "google") == []
+
+
+# ---------- 등록 화면 검색어 추천 ----------
+COUPANG_SUG = '{"keyword":"텀블러","autoComplete":[{"keyword":"텀블러 추천"},{"keyword":"쿠팡 텀블러"}]}'
+
+
+def test_suggest_merges_sources_and_ranks_by_how_many_sources_agree():
+    """여러 출처에 함께 나온 검색어가 위로. 같으면 자동완성 상위가 앞선다."""
+    p, _ = live(naver=Resp(NAVER), daum=Resp(DAUM), google=Resp(GOOGLE), coupang=Resp(COUPANG_SUG))
+    out, errors = keywords.suggest_tags(p, "텀블러")
+    assert errors == {}
+    words = [s["keyword"] for s in out]
+    # '텀블러 추천'은 다음·구글·쿠팡 세 곳에 나온다 → 1등
+    assert words[0] == "텀블러 추천"
+    assert sorted(out[0]["sources"]) == sorted(["다음", "구글", "쿠팡"])
+    # 한 곳에서만 나온 말도 빠지지 않는다
+    assert "스텐텀블러" in words and "스타벅스 텀블러" in words
+
+
+def test_suggest_drops_the_query_itself_and_what_is_already_chosen():
+    p, _ = live(google=Resp(GOOGLE))
+    out, _ = keywords.suggest_tags(p, "텀블러", sources=["google"])
+    assert "텀블러" not in [s["keyword"] for s in out]                 # 상품명으로 이미 검색된다
+    # 이미 넣어 둔 검색어는 띄어쓰기·대소문자만 달라도 다시 추천하지 않는다
+    out2, _ = keywords.suggest_tags(p, "텀블러", sources=["google"], exclude=["텀블러추천"])
+    assert "텀블러 추천" not in [s["keyword"] for s in out2]
+
+
+def test_suggest_never_exceeds_the_twenty_tag_limit():
+    many = json.dumps(["텀블러", [f"텀블러 {i}" for i in range(40)], [], {}], ensure_ascii=False)
+    p, _ = live(google=Resp(many))
+    assert keywords.MAX_TAGS == 20
+    assert len(keywords.suggest_tags(p, "텀블러", sources=["google"])[0]) <= keywords.MAX_TAGS
+    assert keywords.suggest_tags(p, "텀블러", sources=["google"], limit=0)[0] == []
+
+
+def test_suggest_keeps_working_when_one_source_fails():
+    p, _ = live(google=Resp(GOOGLE), naver=Resp("", 503), daum=Resp(DAUM), coupang=Resp(COUPANG_SUG))
+    out, errors = keywords.suggest_tags(p, "텀블러")
+    assert out, "한 출처가 죽어도 나머지 추천은 나와야 한다"
+    assert "네이버" in errors and "구글" not in errors
+
+
+def test_suggest_api_reports_room_left_and_refuses_an_empty_name(monkeypatch):
+    c = A.app.test_client()
+    assert c.get("/api/keyword-suggest?name=").status_code == 400
+    p, _ = live(google=Resp(GOOGLE), naver=Resp(NAVER), daum=Resp(DAUM), coupang=Resp(COUPANG_SUG))
+    monkeypatch.setattr(A, "keyword_provider", p)
+    data = c.get("/api/keyword-suggest?name=텀블러 500ml&exclude=가,나").get_json()
+    assert data["query"] == "텀블러" and data["limit"] == 20
+    assert data["room"] == 18 and len(data["suggestions"]) <= 18   # 이미 쓴 2개만큼 적게 추천한다
+    assert all(s["keyword"] not in ("가", "나") for s in data["suggestions"])
+
+
+def test_register_page_offers_the_suggest_button():
+    page = A.app.test_client().get("/register").get_data(as_text=True)
+    assert 'id="sug-go"' in page and 'id="sug-list"' in page
+    assert "/api/keyword-suggest" in A.app.test_client().get("/static/register.js").get_data(as_text=True)

@@ -27,6 +27,7 @@ from urllib.parse import quote
 import requests
 
 RELATED_N = 8
+MAX_TAGS = 20          # 쿠팡 상품등록 검색어(searchTags) 상한
 DEFAULT_SOURCE = "google"
 # 출처 id -> (이름, 검색 결과 주소). 탭 순서 = 이 순서 (실제로 연관검색어가 나오는 곳을 앞에, 막히는 쿠팡을 뒤에)
 SOURCES = {
@@ -184,6 +185,62 @@ class MockKeywordProvider:
     def related(self, name: str, source: str) -> list[str]:
         base = base_keyword(name)
         return [f"{base} {s}" for s in _SUFFIXES][:RELATED_N] if base else []
+
+
+def _norm(word: str) -> str:
+    """같은 검색어인지 비교할 때 쓰는 모양 (띄어쓰기·대소문자 무시)."""
+    return re.sub(r"\s+", "", (word or "")).lower()
+
+
+def suggest_tags(provider, name: str, sources=None, limit: int = MAX_TAGS,
+                 exclude=()) -> tuple[list[dict], dict[str, str]]:
+    """상품 하나의 등록용 검색어 추천. 여러 출처에 동시에 묻고 합쳐서 최대 ``limit`` 개.
+
+    순위는 **몇 개 출처에 함께 나왔는지**가 먼저다 (여러 곳에서 쓰이는 말일수록 실제 검색량이 많다).
+    같으면 출처 안에서의 등장 순서(자동완성 상위)가 앞선다.
+
+    exclude 에는 사용자가 이미 넣어 둔 검색어를 준다 — 띄어쓰기·대소문자만 다른 중복도 걸러진다.
+    상품 이름에서 뽑은 기준 낱말(base_keyword) 자체는 상품명으로 이미 검색되므로 넣지 않는다.
+
+    반환: (추천 목록, 출처별 오류). 한 출처가 실패해도 나머지 출처의 결과는 그대로 쓴다.
+    """
+    wanted = [s for s in (sources or list(SOURCES)) if s in SOURCES]
+    q = base_keyword(name)
+    if not q or limit <= 0:
+        return [], {}
+
+    skip = {_norm(q)} | {_norm(w) for w in exclude if str(w).strip()}
+    errors: dict[str, str] = {}
+
+    def one(source: str):
+        try:
+            return source, [str(w).strip() for w in provider.related(name, source) if str(w).strip()], None
+        except SourceError as exc:
+            return source, [], str(exc)
+        except Exception as exc:  # noqa: BLE001 — 바깥 출처 하나가 어떻게 실패해도 추천은 떠야 한다
+            return source, [], f"가져오지 못했습니다 ({type(exc).__name__})"
+
+    with ThreadPoolExecutor(max_workers=max(1, len(wanted))) as pool:
+        fetched = list(pool.map(one, wanted))
+
+    # 검색어 -> {"keyword": 처음 본 표기, "sources": [출처 이름], "rank": 출처 안에서의 가장 앞선 순서}
+    merged: dict[str, dict] = {}
+    for source, words, err in fetched:
+        if err:
+            errors[SOURCES[source][0]] = err
+            continue
+        for order, word in enumerate(words):
+            key = _norm(word)
+            if not key or key in skip:
+                continue
+            hit = merged.setdefault(key, {"keyword": word, "sources": [], "rank": order})
+            label = SOURCES[source][0]
+            if label not in hit["sources"]:
+                hit["sources"].append(label)
+            hit["rank"] = min(hit["rank"], order)
+
+    ranked = sorted(merged.values(), key=lambda h: (-len(h["sources"]), h["rank"], h["keyword"]))
+    return [{"keyword": h["keyword"], "sources": h["sources"]} for h in ranked[:limit]], errors
 
 
 def product_rows(provider, items: list[dict], source: str, limit: int = 50) -> tuple[list[dict], str | None]:
