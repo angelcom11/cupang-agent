@@ -116,21 +116,29 @@ def _price_rows():
     return rows
 
 
+def _dashboard_data(items: list[dict], rows: list[dict]) -> dict:
+    """대시보드의 KPI 와 주력 상품. 기존 Jinja 화면과 새 화면(/ui)이 같은 값을 쓰도록 한 곳에 둔다."""
+    return {
+        "kpi": {
+            "total": len(items),
+            "stock_value": sum(i["stock"] * i["sale_price"] for i in items),
+            "low": sum(1 for i in items if i["on_sale"] and i["stock"] <= i["low_stock"]),
+            "soldout": sum(1 for i in items if not i["on_sale"]),
+            "undercut": sum(1 for r in rows if r["diff"] and r["diff"] > 0),
+            "auto": sum(1 for i in items if i["auto_reprice"]),
+        },
+        "featured": [r for r in rows if r["featured"]],
+    }
+
+
 # ---------------- 페이지 ----------------
 @app.route("/")
 def dashboard():
     items = store.items()
     rows = _price_rows()
-    kpi = {
-        "total": len(items),
-        "stock_value": sum(i["stock"] * i["sale_price"] for i in items),
-        "low": sum(1 for i in items if i["on_sale"] and i["stock"] <= i["low_stock"]),
-        "soldout": sum(1 for i in items if not i["on_sale"]),
-        "undercut": sum(1 for r in rows if r["diff"] and r["diff"] > 0),
-        "auto": sum(1 for i in items if i["auto_reprice"]),
-    }
-    featured = [r for r in rows if r["featured"]]
-    return render_template("dashboard.html", kpi=kpi, alerts=store.alerts(15), rows=rows, featured=featured)
+    data = _dashboard_data(items, rows)
+    return render_template("dashboard.html", kpi=data["kpi"], alerts=store.alerts(15),
+                           rows=rows, featured=data["featured"])
 
 
 ALERT_LEVEL = {"danger": "ERROR", "warn": "WARN", "info": "INFO"}
@@ -801,6 +809,44 @@ def api_competitor_shop():
         return jsonify({"error": "쿠팡 업체코드(예: A00012345) 또는 쿠팡 주소(shop.coupang.com/…, www.coupang.com/…)만 넣을 수 있습니다"}), 400
     store.set_competitor_shop(seller, url)
     return jsonify({"seller": seller, "shop": url})
+
+
+@app.route("/api/dashboard")
+def api_dashboard():
+    """새 화면(/ui) 대시보드가 쓰는 데이터. 기존 dashboard() 뷰와 같은 값을 JSON 으로 준다.
+
+    두 화면이 서로 다른 숫자를 보이면 안 되므로 계산을 한 곳에 둔다.
+    """
+    items = store.items()
+    rows = _price_rows()
+    data = _dashboard_data(items, rows)
+    return jsonify({
+        "kpi": data["kpi"],
+        "featured": [
+            {
+                "vendor_item_id": r["vendor_item_id"], "name": r["name"],
+                "on_sale": bool(r["on_sale"]), "auto_stopped": bool(r["auto_stopped"]),
+                "sale_price": r["sale_price"], "stock": r["stock"],
+                "lowest": r["lowest"], "rank": r["rank"], "total": r["total"],
+            }
+            for r in data["featured"]
+        ],
+        "alerts": [
+            {"level": a["level"], "kind": a["kind"], "message": a["message"], "at": a["created_at"]}
+            for a in store.alerts(15)
+        ],
+        "prices": [
+            {
+                "vendor_item_id": r["vendor_item_id"], "name": r["name"], "featured": bool(r["featured"]),
+                "sale_price": r["sale_price"], "lowest": r["lowest"], "diff": r["diff"],
+                "rank": r["rank"], "total": r["total"],
+            }
+            for r in rows
+        ],
+        "soldout_threshold": cfg.get("soldout_threshold"),
+        "last_sync": sync.last_sync,
+        "sync_error": sync.last_error,
+    })
 
 
 @app.route("/api/inventory")
