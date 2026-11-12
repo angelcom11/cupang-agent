@@ -291,6 +291,14 @@ dl.summary dd.act{text-align:right}
 .tagbox .tag{display:inline-flex;align-items:center;gap:4px;background:#eef2ff;color:#3730a3;border-radius:999px;padding:3px 4px 3px 10px;font-size:12px}
 .tagbox .tag button{background:none;color:#6366f1;padding:0 4px;font-size:11px}
 .tagbox #tag-input{border:0;flex:1;min-width:160px;padding:4px;outline:none}
+.sugbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:6px}
+.sugbox{display:flex;flex-wrap:wrap;gap:6px;max-width:760px}
+.sugbox:empty{display:none}
+.sugbox .sug{background:#f8fafc;color:#334155;border:1px dashed #cbd5e1;border-radius:999px;padding:4px 11px;font-size:12px;cursor:pointer}
+.sugbox .sug:hover:not(:disabled){background:#eef2ff;color:#3730a3;border-style:solid;border-color:#a5b4fc}
+.sugbox .sug:disabled{opacity:.45;cursor:default}
+.sugbox .sug.on{background:#eef2ff;color:#3730a3;border-style:solid}
+.sugbox .sug small{color:#94a3b8;font-size:10px;font-weight:600}
 .imglist{list-style:none;margin:0 0 8px;padding:0;display:flex;flex-direction:column;gap:6px;max-width:520px}
 .imglist li{display:flex;align-items:center;gap:10px;border:1px solid #e5e7eb;border-radius:8px;padding:6px}
 .imglist img{width:120px;height:80px;object-fit:cover;border-radius:4px}

@@ -304,6 +304,61 @@
   tagInput.addEventListener('paste', (e) => { const t = e.clipboardData.getData('text'); if (t.includes(',')) { e.preventDefault(); addTags(t); } });
   $('tagbox').addEventListener('click', (e) => { if (e.target.id === 'tagbox') tagInput.focus(); });
 
+  // ---- 검색어 추천 (실시간 연관검색어 기반) ----
+  const sugGo = $('sug-go'), sugAll = $('sug-all'), sugNote = $('sug-note'), sugList = $('sug-list');
+  let suggested = [];
+  function productName() {
+    // 이 페이지에는 form 이 여럿이고 id="reg-form" 도 중복이라, 검색어 입력칸이 속한
+    // 폼을 거슬러 올라가 찾는다 (순서나 id 에 기대지 않는다).
+    const f = tagInput.closest('form');
+    return (f?.display_name?.value || f?.name?.value || '').trim();
+  }
+  function renderSuggestions() {
+    const left = MAX_TAGS - tags.length;
+    const open = suggested.filter((s) => !tags.includes(s.keyword));
+    sugAll.hidden = !open.length || left <= 0;
+    sugAll.textContent = `전체 넣기 (${Math.min(open.length, Math.max(left, 0))}개)`;
+    if (!suggested.length) { sugList.replaceChildren(); return; }
+    sugList.replaceChildren(...suggested.map((s) => {
+      const used = tags.includes(s.keyword);
+      const b = el('button', {
+        type: 'button', className: 'sug' + (used ? ' on' : ''), disabled: used || left <= 0,
+        title: `${s.sources.join(' · ')}에서 나온 검색어`,
+      }, s.keyword, el('small', { textContent: ` ${s.sources.length}` }));
+      b.addEventListener('click', () => { addTags(s.keyword); renderSuggestions(); });
+      return b;
+    }));
+  }
+  async function fetchSuggestions() {
+    const name = productName();
+    if (!name) { sugNote.textContent = '노출상품명을 먼저 입력하세요.'; return; }
+    sugGo.disabled = true; sugNote.textContent = '여러 출처에 묻는 중…';
+    try {
+      const qs = new URLSearchParams({ name, exclude: tags.join(',') });
+      const res = await fetch(`/api/keyword-suggest?${qs}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      suggested = data.suggestions || [];
+      const errs = Object.entries(data.errors || {});
+      const parts = [];
+      parts.push(suggested.length ? `'${data.query}' 기준 ${suggested.length}개 · 눌러서 넣기` : `'${data.query}' 로는 추천할 검색어를 찾지 못했습니다.`);
+      if (data.room <= 0) parts.push('이미 20개를 채웠습니다');
+      if (data.mock) parts.push('모의 데이터');
+      if (errs.length) parts.push(`실패: ${errs.map(([k, v]) => `${k}(${v})`).join(', ')}`);
+      sugNote.textContent = parts.join(' · ');
+    } catch (err) {
+      suggested = [];
+      sugNote.textContent = `추천을 가져오지 못했습니다: ${err.message}`;
+    } finally {
+      sugGo.disabled = false; renderSuggestions();
+    }
+  }
+  sugGo.addEventListener('click', fetchSuggestions);
+  sugAll.addEventListener('click', () => {
+    addTags(suggested.filter((s) => !tags.includes(s.keyword)).map((s) => s.keyword).join(','));
+    renderSuggestions();
+  });
+
   // ================= 검색필터 =================
   function renderFilters() {
     const box = $('filter-attrs');
