@@ -252,3 +252,12 @@ def test_register_page_offers_the_suggest_button():
     page = A.app.test_client().get("/register").get_data(as_text=True)
     assert 'id="sug-go"' in page and 'id="sug-list"' in page
     assert "/api/keyword-suggest" in A.app.test_client().get("/static/register.js").get_data(as_text=True)
+
+
+def test_suggest_reads_the_product_name_field_that_the_form_actually_has():
+    """추천은 노출상품명 칸을 읽는다. 칸 이름이 바뀌면 추천이 조용히 멎으므로 여기서 잡는다."""
+    page = A.app.test_client().get("/register").get_data(as_text=True)
+    js = A.app.test_client().get("/static/register.js").get_data(as_text=True)
+    assert 'name="display_name"' in page          # JS 가 f.display_name 으로 읽는 칸
+    assert "f?.display_name?.value" in js
+    assert "document.forms[0]" not in js          # form 이 여럿이고 id 도 중복이라 쓰면 안 된다

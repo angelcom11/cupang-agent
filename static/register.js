@@ -308,8 +308,10 @@
   const sugGo = $('sug-go'), sugAll = $('sug-all'), sugNote = $('sug-note'), sugList = $('sug-list');
   let suggested = [];
   function productName() {
-    const f = document.forms[0];
-    return (f.display_name?.value || f.name?.value || '').trim();
+    // 이 페이지에는 form 이 여럿이고 id="reg-form" 도 중복이라, 검색어 입력칸이 속한
+    // 폼을 거슬러 올라가 찾는다 (순서나 id 에 기대지 않는다).
+    const f = tagInput.closest('form');
+    return (f?.display_name?.value || f?.name?.value || '').trim();
   }
   function renderSuggestions() {
     const left = MAX_TAGS - tags.length;
