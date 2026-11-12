@@ -69,6 +69,19 @@ def test_featured_card_links_to_that_item_in_inventory():
     assert f'id="item-{vid}"' in inv, "재고 관리 행에 링크가 가리키는 id 가 있어야 한다"
 
 
+def test_anchor_target_clears_the_sticky_nav_on_mobile():
+    """모바일에서는 .side 가 화면 위에 sticky 로 붙으므로(높이 190px) 앵커 정지 위치가 그보다 커야 한다.
+
+    이게 없으면 카드를 눌러 도착한 행이 상단바 뒤에 가려 보이지 않는다 (실측: 121px 가림).
+    """
+    css = A.app.test_client().get("/static/style.css").get_data(as_text=True)
+    # 파일에 @media(max-width:760px) 가 여럿이라 split 으로 고르면 데스크톱 규칙을 집는다.
+    # 모바일 블록 안의 그 규칙만 통째로 찾는다.
+    m = re.search(r"@media\(max-width:760px\)\{#inv-table tr\[id\]\{scroll-margin-top:(\d+)px\}\}", css)
+    assert m, "모바일에서 #inv-table tr[id] 의 scroll-margin-top 을 따로 줘야 한다"
+    assert int(m.group(1)) >= 190, f"상단바(190px)보다 커야 행이 가리지 않는다 (지금 {m.group(1)}px)"
+
+
 def test_settings_keys_saved_and_masked():
     c = A.app.test_client()
     c.post("/settings", data={"action": "save_keys", "vendor_id": "A123", "access_key": "AK-TEST", "secret_key": "SK-SECRET"})

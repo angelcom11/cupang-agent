@@ -33,6 +33,8 @@ tr.warn{background:#fffbeb}tr.danger{background:#fef2f2}
 /* 깜빡이는 애니메이션은 쓰지 않는다 — gen_dark_css.py 가 @keyframes 는 변환하지 않아서
    다크 모드에서 밝은 색이 번쩍였다가 꺼진다. 정적 강조만으로도 충분히 눈에 띈다. */
 #inv-table tr[id]{scroll-margin-top:70px}
+/* 모바일에서는 .side 가 화면 위에 sticky 로 붙는다(높이 190px). 70px 로 세우면 행이 그 뒤에 가린다 */
+@media(max-width:760px){#inv-table tr[id]{scroll-margin-top:200px}}
 #inv-table tr:target{background:#fff7ed;box-shadow:inset 3px 0 0 #f97316}
 .pill{padding:2px 9px;border-radius:99px;font-weight:700;font-size:12px;white-space:nowrap}
 .pill.good{background:#dcfce7;color:#166534}.pill.bad{background:#fee2e2;color:#991b1b}
