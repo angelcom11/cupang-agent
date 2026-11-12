@@ -11,11 +11,12 @@
 </div>
 
 <section class="card featured">
-  <h2>★ 주력 상품 <span class="muted">재고 관리에서 ☆를 눌러 지정</span></h2>
+  <h2>★ 주력 상품 <span class="muted">카드를 누르면 재고 관리의 해당 상품으로 갑니다</span></h2>
   {% if featured %}
   <div class="fgrid">
     {% for r in featured %}
-    <div class="fcard {{ 'off' if not r.on_sale }}">
+    <a class="fcard {{ 'off' if not r.on_sale }}" href="{{ url_for('inventory') }}#item-{{ r.vendor_item_id }}"
+       title="{{ r.name }} — 재고 관리에서 보기">
       <div class="fhead"><b>{{ r.name }}</b>
         {% if not r.on_sale %}<span class="pill bad">{{ '자동품절' if r.auto_stopped else '판매중지' }}</span>
         {% else %}<span class="pill good">판매중</span>{% endif %}</div>
@@ -25,7 +26,7 @@
         <div><dt>경쟁 최저</dt><dd>{{ '{:,}'.format(r.lowest) ~ '원' if r.lowest else '-' }}</dd></div>
         <div><dt>가격 순위</dt><dd><span class="pill {{ 'good' if r.rank==1 else 'bad' }}">{{ r.rank }}/{{ r.total }}</span></dd></div>
       </dl>
-    </div>
+    </a>
     {% endfor %}
   </div>
   {% else %}

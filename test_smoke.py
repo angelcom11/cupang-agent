@@ -52,6 +52,23 @@ def test_featured_on_dashboard():
     assert "fcard" in html and "캠핑용 LED 랜턴" in html.split("fgrid")[1].split("</section>")[0]
 
 
+def test_featured_card_links_to_that_item_in_inventory():
+    """주력 상품 카드를 누르면 재고 관리의 그 상품 행으로 간다 (대시보드 → #item-<옵션ID>)."""
+    c = A.app.test_client()
+    vid = _item("캠핑용 LED 랜턴")["vendor_item_id"]
+    if "fcard" not in c.get("/").get_data(as_text=True):
+        c.post(f"/items/{vid}/featured")
+
+    card = c.get("/").get_data(as_text=True).split("fgrid")[1].split("</section>")[0]
+    # 카드가 링크여야 하고, 가리키는 곳이 재고 관리의 그 옵션이어야 한다
+    assert f'href="/inventory#item-{vid}"' in card, "카드가 재고 관리의 해당 상품을 가리켜야 한다"
+    assert "<a class=\"fcard" in card, "카드 전체가 눌리는 링크여야 한다"
+
+    # 그 자리가 재고 관리에 실제로 있어야 한다 — 없으면 눌러도 아무 데도 안 간다
+    inv = c.get("/inventory").get_data(as_text=True)
+    assert f'id="item-{vid}"' in inv, "재고 관리 행에 링크가 가리키는 id 가 있어야 한다"
+
+
 def test_settings_keys_saved_and_masked():
     c = A.app.test_client()
     c.post("/settings", data={"action": "save_keys", "vendor_id": "A123", "access_key": "AK-TEST", "secret_key": "SK-SECRET"})
