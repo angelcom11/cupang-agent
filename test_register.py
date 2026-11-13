@@ -81,6 +81,6 @@ def test_clean_html():
 def test_invalid_settings_change_nothing():
     c = A.app.test_client()
     before = dict(A.cfg)
-    c.post("/settings", data={"action": "save_rules", "sync_interval_sec": "99", "soldout_threshold": "7",
+    c.post("/classic/settings", data={"action": "save_rules", "sync_interval_sec": "99", "soldout_threshold": "7",
                               "public_base_url": "nohttp.com"})
     assert {k: A.cfg.get(k) for k in before} == before

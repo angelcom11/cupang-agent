@@ -58,4 +58,4 @@ def test_menu_shows_telegram_status(monkeypatch):
     n.record(False, "전송 실패: 테스트")
     assert n.status()["text"] == "텔레그램 전송 실패"
     c = A.app.test_client()
-    assert "telegram" in c.get("/api/health").get_json() and 'id="h-tg"' in c.get("/").get_data(as_text=True)
+    assert "telegram" in c.get("/api/health").get_json() and 'id="h-tg"' in c.get("/classic/").get_data(as_text=True)

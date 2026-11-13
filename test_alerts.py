@@ -11,7 +11,7 @@ def test_delete_selected_all_and_export():
         A.store.alert("warn", "stock", f"재고 부족({i}개): 상품{i}")
     ids = [a["id"] for a in A.store.alerts()]
     c = A.app.test_client()
-    html = c.get("/").get_data(as_text=True)
+    html = c.get("/classic/").get_data(as_text=True)
     assert html.count('name="alert_id"') == 3 and "로그 저장" in html
     r = c.get("/alerts/export.log")
     body = r.data.decode("utf-8")

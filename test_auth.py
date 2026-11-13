@@ -34,7 +34,8 @@ def test_start_page_is_login_and_logout_returns_there():
     cookie = r.headers["Set-Cookie"]
     assert "Expires=" in cookie and "HttpOnly" in cookie        # 로그인 유지 → 브라우저를 닫아도 남는 쿠키
     assert auth.REMEMBER_DAYS == 30 and A.app.permanent_session_lifetime.days == 30
-    page = c.get("/").get_data(as_text=True)
+    # 로그아웃 버튼은 기존 화면의 메뉴에 있다 (루트는 새 화면이 쓴다)
+    page = c.get("/classic/").get_data(as_text=True)
     assert "로그아웃" in page and 'action="/logout"' in page
     assert c.get("/login").status_code == 302                 # 이미 로그인했으면 로그인 화면을 건너뜀
     assert c.get("/login?preview=1").status_code == 200       # 설정 미리보기는 보임
@@ -50,7 +51,7 @@ def test_login_page_settings_saved_and_shown_escaped():
     form = {"action": "save_login_page", "brand": "우리가게", "title": "직원 로그인", "message": "<script>x</script>안녕하세요",
             "footer": "문의 010-1234-5678", "accent": "#2563EB", "bg_color": "#ffffff", "layout": "split",
             "bg_image": up["url"], "show_help": ""}
-    r = c.post("/settings", data=form, follow_redirects=True)
+    r = c.post("/classic/settings", data=form, follow_redirects=True)
     assert "로그인 화면 설정을 저장했습니다" in r.get_data(as_text=True)
     lp = login_page.get(A.cfg)
     assert lp["brand"] == "우리가게" and lp["accent"] == "#2563eb" and lp["bg_image"] == up["name"] and not lp["show_help"]
@@ -61,7 +62,7 @@ def test_login_page_settings_saved_and_shown_escaped():
     assert "layout-split" in html and up["name"] in html and "#2563eb" in html
     assert "비밀번호를 잊었으면" not in html
     _login(c)
-    r = c.post("/settings", data={"action": "reset_login_page"}, follow_redirects=True)
+    r = c.post("/classic/settings", data={"action": "reset_login_page"}, follow_redirects=True)
     assert "기본 모양으로" in r.get_data(as_text=True) and login_page.get(A.cfg) == login_page.DEFAULTS
 
 
@@ -71,7 +72,7 @@ def test_login_page_rejects_bad_values_without_saving():
     before = login_page.get(A.cfg)
     bad = {"action": "save_login_page", "brand": "x", "title": "y", "accent": "red;}body{display:none",
            "bg_color": "#fff", "layout": "center", "bg_image": "../config.json", "bg_type": "image"}
-    r = c.post("/settings", data=bad, follow_redirects=True).get_data(as_text=True)
+    r = c.post("/classic/settings", data=bad, follow_redirects=True).get_data(as_text=True)
     assert "#RRGGBB" in r and "올린 이미지만" in r
     assert login_page.get(A.cfg) == before
     A.cfg["login_page"] = {"accent": "nope", "layout": "weird", "bg_type": "image", "bg_image": "../x"}

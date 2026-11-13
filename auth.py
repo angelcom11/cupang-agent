@@ -171,7 +171,8 @@ def _safe_next(target: str | None) -> str:
     """로그인 후 돌아갈 주소: 이 사이트 안의 경로만 (다른 사이트로 보내는 피싱 링크 방지)."""
     if target and target.startswith("/") and not target.startswith("//") and not urlparse(target).netloc:
         return target
-    return url_for("dashboard")
+    # 'dashboard' 는 /classic/ 로 옮긴 기존 화면이다. 로그인하면 새 화면으로 들어간다.
+    return url_for("spa")
 
 
 # ---------------- 연결 ----------------
@@ -240,7 +241,7 @@ def setup():
             _login(user, remember=False)
             auth.emit("관리자 계정 만듦 · 로그인", user)
             flash("로그인 계정을 만들었습니다. 다음부터는 이 아이디와 비밀번호로 로그인하세요.", "info")
-            return redirect(url_for("dashboard"))
+            return redirect(url_for("spa"))
     return render_template("login.html", mode="setup", error=error, need_code=need_code,
                            env_path=str(auth.env_path), user=request.form.get("user", ""))
 

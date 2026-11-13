@@ -98,7 +98,7 @@ def test_failed_action_keeps_typed_fields(monkeypatch):
                                               "topics": ["price"]}, follow_redirects=True).get_data(as_text=True)
     assert 'value="98765"' in html and 'value="price" checked' in html and 'value="bad"' not in html
     assert "telegram" not in A.cfg
-    assert 'value="98765"' not in c.get("/settings").get_data(as_text=True)   # 한 번만 보여 줌
+    assert 'value="98765"' not in c.get("/classic/settings").get_data(as_text=True)   # 한 번만 보여 줌
 
 
 def test_save_schedule_and_validate_time(monkeypatch):

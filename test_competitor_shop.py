@@ -28,6 +28,6 @@ def test_provider_link_and_saved_link_on_prices_page():
     assert r.get_json()["shop"] == "https://shop.coupang.com/A00022222"
     row = next(r for r in c.get("/api/prices").get_json()["rows"] if r["vendor_item_id"] == "v-shop")
     assert {x["seller"]: x["shop_source"] for x in row["competitors"]}["미등록판매자"] == "saved"
-    assert "data-comps=" in c.get("/prices").get_data(as_text=True)
+    assert "data-comps=" in c.get("/classic/prices").get_data(as_text=True)
     c.post("/api/competitor-shop", json={"seller": "미등록판매자", "url": ""})          # 지우기
     assert "미등록판매자" not in A.store.competitor_shops()

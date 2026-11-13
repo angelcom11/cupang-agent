@@ -116,21 +116,29 @@ def _price_rows():
     return rows
 
 
+def _dashboard_data(items: list[dict], rows: list[dict]) -> dict:
+    """대시보드의 KPI 와 주력 상품. 기존 Jinja 화면과 새 화면(/ui)이 같은 값을 쓰도록 한 곳에 둔다."""
+    return {
+        "kpi": {
+            "total": len(items),
+            "stock_value": sum(i["stock"] * i["sale_price"] for i in items),
+            "low": sum(1 for i in items if i["on_sale"] and i["stock"] <= i["low_stock"]),
+            "soldout": sum(1 for i in items if not i["on_sale"]),
+            "undercut": sum(1 for r in rows if r["diff"] and r["diff"] > 0),
+            "auto": sum(1 for i in items if i["auto_reprice"]),
+        },
+        "featured": [r for r in rows if r["featured"]],
+    }
+
+
 # ---------------- 페이지 ----------------
-@app.route("/")
+@app.route("/classic/")
 def dashboard():
     items = store.items()
     rows = _price_rows()
-    kpi = {
-        "total": len(items),
-        "stock_value": sum(i["stock"] * i["sale_price"] for i in items),
-        "low": sum(1 for i in items if i["on_sale"] and i["stock"] <= i["low_stock"]),
-        "soldout": sum(1 for i in items if not i["on_sale"]),
-        "undercut": sum(1 for r in rows if r["diff"] and r["diff"] > 0),
-        "auto": sum(1 for i in items if i["auto_reprice"]),
-    }
-    featured = [r for r in rows if r["featured"]]
-    return render_template("dashboard.html", kpi=kpi, alerts=store.alerts(15), rows=rows, featured=featured)
+    data = _dashboard_data(items, rows)
+    return render_template("dashboard.html", kpi=data["kpi"], alerts=store.alerts(15),
+                           rows=rows, featured=data["featured"])
 
 
 ALERT_LEVEL = {"danger": "ERROR", "warn": "WARN", "info": "INFO"}
@@ -160,17 +168,12 @@ def export_alerts():
         "Content-Disposition": f"attachment; filename=wing-alerts-{datetime.now():%Y%m%d-%H%M%S}.log"})
 
 
-@app.route("/inventory", methods=["GET", "POST"])
+@app.route("/classic/inventory", methods=["GET", "POST"])
 def inventory():
     if request.method == "POST":
         vid = request.form["vendor_item_id"]
         try:
-            if request.form.get("stock", "").strip():
-                qty = int(request.form["stock"])
-                client.update_quantity(vid, qty)
-                store.set_item_field(vid, "stock", qty)
-            store.update_rule(vid, low_stock=int(request.form.get("low_stock") or 0))
-            sync.apply_soldout_rule(store.item(vid))  # 입고로 기준 이상이 되면 바로 판매재개
+            _update_stock(vid, request.form.get("stock", ""), request.form.get("low_stock", ""))
             flash("재고 정보를 반영했습니다", "info")
         except (CoupangAPIError, ValueError) as exc:
             flash(f"실패: {exc}", "danger")
@@ -178,26 +181,54 @@ def inventory():
     return render_template("inventory.html", items=store.items())
 
 
-@app.route("/items/<vid>/featured", methods=["POST"])
-def toggle_featured(vid):
+def _toggle_featured(vid: str) -> None:
     item = store.item(vid)
     if item:
         store.update_rule(vid, featured=0 if item["featured"] else 1)
+
+
+def _item_or_fail(vid: str) -> dict:
+    """없는 옵션ID 로 들어오면 첨자 접근에서 터지지 않고 읽을 수 있는 실패를 낸다."""
+    item = store.item(vid)
+    if item is None:
+        raise ValueError("없는 상품입니다")
+    return item
+
+
+def _toggle_sale(vid: str) -> str:
+    """판매중지/재개를 쿠팡에 반영한다. 사람이 읽을 결과 문구를 돌려준다."""
+    item = _item_or_fail(vid)
+    if item["on_sale"]:
+        client.stop_sale(vid)
+    else:
+        client.resume_sale(vid)
+    store.set_item_field(vid, "on_sale", 0 if item["on_sale"] else 1)
+    store.update_rule(vid, auto_stopped=0)  # 수동 조작한 상품은 자동 재개 대상에서 뺀다
+    return f"{'판매중지' if item['on_sale'] else '판매재개'}: {item['name']}"
+
+
+def _update_stock(vid: str, stock: str, low_stock: str) -> None:
+    """재고와 부족 알림 기준을 반영한다. stock 이 빈 값이면 기준만 바꾼다."""
+    _item_or_fail(vid)
+    if stock.strip():
+        qty = int(stock)
+        client.update_quantity(vid, qty)
+        store.set_item_field(vid, "stock", qty)
+    store.update_rule(vid, low_stock=int(low_stock or 0))
+    sync.apply_soldout_rule(_item_or_fail(vid))  # 입고로 기준 이상이 되면 바로 판매재개
+
+
+@app.route("/items/<vid>/featured", methods=["POST"])
+def toggle_featured(vid):
+    _toggle_featured(vid)
     return redirect(request.referrer or url_for("inventory"))
 
 
 @app.route("/items/<vid>/sale", methods=["POST"])
 def toggle_sale(vid):
-    item = store.item(vid)
     try:
-        if item["on_sale"]:
-            client.stop_sale(vid)
-        else:
-            client.resume_sale(vid)
-        store.set_item_field(vid, "on_sale", 0 if item["on_sale"] else 1)
-        store.update_rule(vid, auto_stopped=0)  # 수동 조작한 상품은 자동 재개 대상에서 뺀다
-        flash(f"{'판매중지' if item['on_sale'] else '판매재개'}: {item['name']}", "info")
-    except CoupangAPIError as exc:
+        flash(_toggle_sale(vid), "info")
+    except (CoupangAPIError, ValueError) as exc:
         flash(f"실패: {exc}", "danger")
     return redirect(url_for("inventory"))
 
@@ -215,7 +246,7 @@ def delete_items():
     return redirect(url_for("inventory"))
 
 
-@app.route("/prices")
+@app.route("/classic/prices")
 def prices():
     return render_template("prices.html", rows=_price_rows())
 
@@ -226,26 +257,38 @@ def _keyword_data(source: str) -> dict:
         source = keywords.DEFAULT_SOURCE
     mock = getattr(keyword_provider, "name", "") == "mock"
     out = {"source": source, "label": keywords.SOURCES[source][0], "mock": mock, "mock_on_live": mock and client.mode == "live",
+           # 새 화면이 출처 선택을 그리려면 목록이 필요하다 (Jinja 쪽은 라우트에서 따로 넘긴다)
+           "sources": [{"id": k, "label": v[0]} for k, v in keywords.SOURCES.items()],
            "products": [], "related_error": None, "checked": datetime.now().strftime("%H:%M:%S")}
     out["products"], out["related_error"] = keywords.product_rows(keyword_provider, store.items(), source)
     return out
 
 
-@app.route("/keywords")
+@app.route("/classic/keywords")
 def keyword_page():
     return render_template("keywords.html", sources=[{"id": k, "label": v[0]} for k, v in keywords.SOURCES.items()],
                            default_source=keywords.DEFAULT_SOURCE,
                            mock=getattr(keyword_provider, "name", "") == "mock", mock_on_live=getattr(keyword_provider, "name", "") == "mock" and client.mode == "live")
 
 
+def _save_price_rule(vid: str, auto_reprice: bool, min_price, undercut) -> None:
+    """자동 가격조정 규칙. Jinja 화면과 새 화면이 같이 쓴다."""
+    _item_or_fail(vid)
+    store.update_rule(
+        vid, auto_reprice=1 if auto_reprice else 0,
+        min_price=int(min_price or 0), undercut=int(undercut or 0),
+    )
+
+
 @app.route("/prices/rule", methods=["POST"])
 def price_rule():
     f = request.form
-    store.update_rule(
-        f["vendor_item_id"], auto_reprice=1 if f.get("auto_reprice") else 0,
-        min_price=int(f.get("min_price") or 0), undercut=int(f.get("undercut") or 0),
-    )
-    flash("가격 규칙을 저장했습니다", "info")
+    try:
+        _save_price_rule(f["vendor_item_id"], bool(f.get("auto_reprice")),
+                         f.get("min_price"), f.get("undercut"))
+        flash("가격 규칙을 저장했습니다", "info")
+    except ValueError as exc:
+        flash(f"실패: {exc}", "danger")
     return redirect(url_for("prices"))
 
 
@@ -490,17 +533,25 @@ def csv_template_download():
                     headers={"Content-Disposition": "attachment; filename=coupang_products_template.csv"})
 
 
-def _submit(name: str, payload: dict) -> tuple[bool, str]:
+def _submit_quiet(name: str, payload: dict) -> tuple[bool, str]:
+    """쿠팡에 등록하고 이력을 남긴다. 화면 안내는 하지 않는다 — 호출자가 한다.
+
+    JSON 경로(/api/register/submit)는 flash 를 쓸 수 없으므로 여기서 떼어 놓는다.
+    """
     try:
         res = client.create_product(payload)
         msg = ("[모의] " if client.mode == "mock" else "") + f"등록 완료 sellerProductId={res.get('data')}"
         store.log_registration(name, True, msg, payload, mode=client.mode, seller_product_id=res.get("data"))
-        flash(f"'{name}' {msg}", "info")
         return True, msg
     except CoupangAPIError as exc:
         store.log_registration(name, False, str(exc), payload, mode=client.mode)
-        flash(f"'{name}' 등록 실패: {exc}", "danger")
         return False, str(exc)
+
+
+def _submit(name: str, payload: dict) -> tuple[bool, str]:
+    ok, msg = _submit_quiet(name, payload)
+    flash(f"'{name}' {msg}" if ok else f"'{name}' 등록 실패: {msg}", "info" if ok else "danger")
+    return ok, msg
 
 
 def _register_csv(file, request_approval: bool):
@@ -585,7 +636,7 @@ def _apply_client(new_cfg: dict):
     _cache.clear()  # 다른 계정·모드의 카테고리 메타/출고지를 섞지 않는다
 
 
-@app.route("/settings", methods=["GET", "POST"])
+@app.route("/classic/settings", methods=["GET", "POST"])
 def settings():
     if request.method == "POST":
         action = request.form.get("action")
@@ -681,44 +732,56 @@ def _tg_form() -> dict:
     }
 
 
+def _apply_telegram(action: str | None, tg: dict) -> tuple[str, list[dict] | None]:
+    """텔레그램 설정 동작. 사람이 읽을 결과 문구와, 찾은 대화 목록(find_chat 일 때)을 돌려준다.
+
+    Jinja 화면과 새 화면(/ui)이 같이 쓴다.
+    입력이 잘못된 것은 ValueError, 텔레그램 쪽 실패는 TelegramError 로 올린다 —
+    새 화면이 400 과 502 를 가려 쓴다 (502 는 상대 서버 탓이라는 뜻이다).
+    """
+    if action != "clear" and not (TIME_RE.match(tg["send_from"]) and TIME_RE.match(tg["send_to"])):
+        raise ValueError("보낼 시간대는 00:00 ~ 23:59 형식으로 입력하세요")
+    if action == "clear":
+        cfg.pop("telegram", None)
+        save_config(cfg)
+        return "텔레그램 연결을 해제했습니다", None
+    if not tg["token"]:
+        raise ValueError("봇 토큰을 입력하세요")
+    if action == "find_chat":
+        chats = find_chats(tg["token"])
+        if not chats:
+            raise TelegramError("봇에게 온 메시지가 없습니다. 텔레그램에서 봇에게 아무 메시지나 보낸 뒤 다시 눌러 주세요")
+        cfg["telegram"] = {**tg, "chat_id": tg["chat_id"] or chats[0]["id"]}
+        save_config(cfg)
+        return f"대화 {len(chats)}개를 찾았습니다. 알림 받을 대화를 확인하세요", chats
+    if action == "test":
+        if not tg["chat_id"]:
+            raise ValueError("대화 ID(chat id)를 입력하거나 '대화 찾기'를 눌러 주세요")
+        notifier.send_now("✅ WING 매니저 텔레그램 연결 테스트입니다.", tg["token"], tg["chat_id"])
+        notifier.record(True, f"{datetime.now():%m-%d %H:%M:%S} 테스트 메시지 전송 성공")
+        cfg["telegram"] = tg
+        save_config(cfg)
+        return "테스트 메시지를 보냈습니다. 텔레그램을 확인하세요", None
+    # save
+    if tg["enabled"] and not tg["chat_id"]:
+        raise ValueError("알림을 켜려면 대화 ID가 필요합니다")
+    cfg["telegram"] = tg
+    save_config(cfg)
+    on = ", ".join(TOPICS[t][0] for t in tg["topics"]) or "선택 없음"
+    when = "하루 종일" if tg["send_from"] == tg["send_to"] else f"{tg['send_from']}~{tg['send_to']}"
+    return (f"텔레그램 설정을 저장했습니다 ({'켜짐' if tg['enabled'] else '꺼짐'} · {on} · "
+            f"{FREQUENCIES[tg['frequency']]} · {when})"), None
+
+
 @app.route("/settings/telegram", methods=["POST"])
 def telegram_settings():
     action, tg = request.form.get("action"), _tg_form()
     try:
-        if action != "clear" and not (TIME_RE.match(tg["send_from"]) and TIME_RE.match(tg["send_to"])):
-            raise TelegramError("보낼 시간대는 00:00 ~ 23:59 형식으로 입력하세요")
-        if action == "clear":
-            cfg.pop("telegram", None)
-            save_config(cfg)
-            flash("텔레그램 연결을 해제했습니다", "info")
-        elif not tg["token"]:
-            raise TelegramError("봇 토큰을 입력하세요")
-        elif action == "find_chat":
-            chats = find_chats(tg["token"])
-            if not chats:
-                raise TelegramError("봇에게 온 메시지가 없습니다. 텔레그램에서 봇에게 아무 메시지나 보낸 뒤 다시 눌러 주세요")
-            cfg["telegram"] = {**tg, "chat_id": tg["chat_id"] or chats[0]["id"]}
-            save_config(cfg)
+        message, chats = _apply_telegram(action, tg)
+        if chats is not None:
             session_chats["chats"] = chats
-            flash(f"대화 {len(chats)}개를 찾았습니다. 알림 받을 대화를 확인하세요", "info")
-        elif action == "test":
-            if not tg["chat_id"]:
-                raise TelegramError("대화 ID(chat id)를 입력하거나 '대화 찾기'를 눌러 주세요")
-            notifier.send_now("✅ WING 매니저 텔레그램 연결 테스트입니다.", tg["token"], tg["chat_id"])
-            notifier.record(True, f"{datetime.now():%m-%d %H:%M:%S} 테스트 메시지 전송 성공")
-            cfg["telegram"] = tg
-            save_config(cfg)
-            flash("테스트 메시지를 보냈습니다. 텔레그램을 확인하세요", "info")
-        else:  # save
-            if tg["enabled"] and not tg["chat_id"]:
-                raise TelegramError("알림을 켜려면 대화 ID가 필요합니다")
-            cfg["telegram"] = tg
-            save_config(cfg)
-            on = ", ".join(TOPICS[t][0] for t in tg["topics"]) or "선택 없음"
-            when = "하루 종일" if tg["send_from"] == tg["send_to"] else f"{tg['send_from']}~{tg['send_to']}"
-            flash(f"텔레그램 설정을 저장했습니다 ({'켜짐' if tg['enabled'] else '꺼짐'} · {on} · "
-                  f"{FREQUENCIES[tg['frequency']]} · {when})", "info")
-    except TelegramError as exc:
+        flash(message, "info")
+    except (TelegramError, ValueError) as exc:
         flash(f"텔레그램: {exc}", "danger")
         # 실패해도 입력한 대화 ID·선택 항목은 다시 보여 준다 (토큰은 보안상 다시 채우지 않음)
         session_chats["form"] = {k: v for k, v in tg.items() if k != "token"}
@@ -752,10 +815,29 @@ def api_categories():
 # ---------------- JSON API (실시간 갱신용) ----------------
 @app.route("/api/prices")
 def api_prices():
-    rows = _price_rows()
-    for r in rows:
-        r.pop("history", None)
-    return jsonify({"last_sync": sync.last_sync, "rows": rows})
+    """경쟁가 비교. 추이는 그래프에 필요한 값만 남겨 가볍게 보낸다."""
+    rows = []
+    for r in _price_rows():
+        rows.append({
+            **_json_item(r),
+            "history": [{"at": h["checked_at"], "low": h["low"], "mine": h["mine"]}
+                        for h in r.get("history", [])],
+        })
+    return jsonify({"last_sync": sync.last_sync, "error": sync.last_error, "rows": rows})
+
+
+@app.route("/api/prices/rule", methods=["POST"])
+def api_price_rule():
+    body = request.get_json(silent=True) or {}
+    vid = str(body.get("vendor_item_id") or "")
+    if not store.item(vid):
+        return jsonify({"error": "없는 상품입니다"}), 404
+    try:
+        _save_price_rule(vid, bool(body.get("auto_reprice")),
+                         body.get("min_price"), body.get("undercut"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "하한가와 인하폭은 숫자여야 합니다"}), 400
+    return jsonify({"message": "가격 규칙을 저장했습니다", "item": _json_item(_item_or_fail(vid))})
 
 
 @app.route("/api/keywords")
@@ -785,6 +867,240 @@ def api_keyword_suggest():
                     "mock": getattr(keyword_provider, "name", "") == "mock"})
 
 
+# ---- 상품 등록 (새 화면) ----
+# 단계 정의·검증·요청본문 만들기는 product_form.py 에 이미 있다. 그대로 쓴다 —
+# 검증 규칙이 두 벌로 갈라지면 한쪽만 고쳐지는 사고가 난다.
+@app.route("/api/register/meta")
+def api_register_meta():
+    """마법사가 처음에 받아가는 것: 단계 목록, 빈 폼의 기본값, 임시저장·이력, 출고지/반품지."""
+    places = shipping_places()
+    return jsonify({
+        "steps": [{"id": k, "label": v} for k, v in pf.STEPS],
+        "main_subs": pf.MAIN_SUBS,
+        "form": pf.normalize_form({}, pf.defaults_from_config(cfg)),
+        "json_keys": sorted(pf.JSON_KEYS),
+        "drafts": store.drafts(),
+        "history": store.registrations(),
+        "categories": categories.summary(),
+        "places": places,
+        "public_base_url": cfg.get("public_base_url", ""),
+        "has_saved_defaults": bool(cfg.get("register_defaults")),
+        "max_detail_images": pf.MAX_DETAIL_IMAGES,
+        "mode": client.mode,
+    })
+
+
+def _register_form(body: dict) -> dict:
+    """JSON 본문을 폼 모양으로 맞춘다. 기존 _form_data 와 같은 정규화를 거친다."""
+    return pf.normalize_form({k: v for k, v in body.items() if k != "action"},
+                             pf.defaults_from_config(cfg))
+
+
+def _register_errors(form: dict) -> tuple[list[dict], dict | None]:
+    """검증 결과. 오류마다 고칠 단계를 붙여 보낸다 — 마법사가 그 단계로 데려간다."""
+    meta = category_meta(form.get("category_code"))
+    errors = validate_form(form, categories, meta)
+    if meta is None and form.get("category_code"):
+        errors.append("카테고리 정보(필수 옵션·고시정보)를 쿠팡에서 불러오지 못했습니다. 잠시 후 다시 시도하세요")
+    return ([{"message": e, "step": pf.step_of_error(e), "sub": pf.sub_of_error(e)} for e in errors], meta)
+
+
+@app.route("/api/register/validate", methods=["POST"])
+def api_register_validate():
+    form = _register_form(request.get_json(silent=True) or {})
+    errors, _ = _register_errors(form)
+    return jsonify({"errors": errors, "form": form})
+
+
+@app.route("/api/register/preview", methods=["POST"])
+def api_register_preview():
+    """쿠팡에 보낼 요청 본문을 그대로 보여준다. 보내기 전에 눈으로 확인하는 자리다."""
+    form = _register_form(request.get_json(silent=True) or {})
+    errors, meta = _register_errors(form)
+    if errors:
+        return jsonify({"errors": errors}), 400
+    payload = build_product_payload(form, cfg.get("vendor_id", "A00000000"), False, meta)
+    return jsonify({"errors": [], "payload": payload})
+
+
+@app.route("/api/register/submit", methods=["POST"])
+def api_register_submit():
+    """action: save(쿠팡에 임시저장) · request(바로 판매요청). WING 의 두 버튼과 같다."""
+    body = request.get_json(silent=True) or {}
+    action = body.get("action")
+    if action not in ("save", "request"):
+        return jsonify({"error": "save 또는 request 여야 합니다"}), 400
+    form = _register_form(body)
+    errors, meta = _register_errors(form)
+    if errors:
+        return jsonify({"errors": errors}), 400
+    if body.get("remember_defaults"):
+        _remember_defaults(form)
+    payload = build_product_payload(form, cfg.get("vendor_id", "A00000000"), action == "request", meta)
+    name = product_names(form)[0]
+    ok, message = _submit_quiet(name, payload)
+    if not ok:
+        return jsonify({"error": f"'{name}' 등록 실패: {message}"}), 502
+    # 보낸 내용도 임시저장에 남겨 이어서 고칠 수 있게 한다 (기존 화면과 같다)
+    draft_id = store.save_draft(form, body.get("draft_id"), note=message)
+    return jsonify({"message": f"'{name}' {message}", "draft_id": draft_id,
+                    "history": store.registrations()})
+
+
+@app.route("/api/register/draft", methods=["POST"])
+def api_register_draft():
+    """임시저장. 필수값이 없어도 언제든 저장된다 (기존 화면과 같다)."""
+    body = request.get_json(silent=True) or {}
+    form = _register_form(body)
+    if body.get("remember_defaults"):
+        _remember_defaults(form)
+    draft_id = store.save_draft(form, body.get("draft_id"))
+    return jsonify({"message": f"임시저장했습니다: {product_names(form)[0] or '(이름 없음)'}",
+                    "draft_id": draft_id, "drafts": store.drafts()})
+
+
+@app.route("/api/register/draft/<int:draft_id>")
+def api_register_draft_load(draft_id):
+    d = store.draft(draft_id)
+    if not d:
+        return jsonify({"error": "없는 임시저장입니다"}), 404
+    form = d["data"]
+    if "display_name" not in form:  # 상품명이 하나였던 이전 임시저장 → 노출상품명으로 옮김
+        form = {**form, "display_name": form.get("name", ""), "name": ""}
+    return jsonify({"draft_id": draft_id,
+                    "form": pf.normalize_form(form, pf.defaults_from_config(cfg))})
+
+
+# ---- 설정 (새 화면) ----
+# 비밀값은 내보내지 않는다. 있는지 여부(has_*)만 준다 — 화면은 그걸로 충분하다.
+@app.route("/api/settings")
+def api_settings():
+    tg = cfg.get("telegram") or {}
+    return jsonify({
+        "keys": {
+            "access_key": cfg.get("access_key", ""),  # 공개키는 화면에서 확인할 수 있어야 한다
+            "has_secret_key": bool(cfg.get("secret_key")),
+            "vendor_id": cfg.get("vendor_id", ""),
+            "mode": client.mode,
+        },
+        "rules": {
+            "sync_interval_sec": int(cfg.get("sync_interval_sec") or 30),
+            "soldout_threshold": int(cfg.get("soldout_threshold") or 0),
+            "auto_soldout": bool(cfg.get("auto_soldout")),
+            "public_base_url": cfg.get("public_base_url", ""),
+        },
+        "theme": cfg.get("theme", "system"),
+        "themes": [{"id": k, "label": v} for k, v in THEMES.items()],
+        "telegram": {
+            "has_token": bool(tg.get("token")),
+            "chat_id": tg.get("chat_id", ""),
+            "enabled": bool(tg.get("enabled")),
+            "topics": list(tg.get("topics") or []),
+            "frequency": tg.get("frequency", "realtime"),
+            "send_from": tg.get("send_from", "00:00"),
+            "send_to": tg.get("send_to", "00:00"),
+            "outside": tg.get("outside", "hold"),
+            "pending": notifier.pending_count,
+            "window_open": notifier.window_open(),
+            "last_result": notifier.last_result,
+        },
+        # TOPICS 의 값은 (이름, 설명) 튜플이다
+        "topics": [{"id": k, "label": v[0]} for k, v in TOPICS.items()],
+        "frequencies": [{"id": k, "label": v} for k, v in FREQUENCIES.items()],
+        "categories": categories.summary(),
+        "mock_competitor_live": sync.competitor_is_mock_on_live,
+    })
+
+
+@app.route("/api/settings/keys", methods=["POST"])
+def api_settings_keys():
+    """action: test · save · clear. 빈 칸은 기존 값을 그대로 둔다."""
+    body = request.get_json(silent=True) or {}
+    action = body.get("action")
+    if action == "clear":
+        for k in ("access_key", "secret_key"):
+            cfg.pop(k, None)
+        save_config(cfg)
+        _apply_client(cfg)
+        return jsonify({"message": "API 키를 삭제했습니다 → 모의 모드", "mode": client.mode})
+
+    keys = {
+        "access_key": str(body.get("access_key") or "").strip() or cfg.get("access_key", ""),
+        "secret_key": str(body.get("secret_key") or "").strip() or cfg.get("secret_key", ""),
+        "vendor_id": str(body.get("vendor_id") or "").strip() or cfg.get("vendor_id", ""),
+    }
+    if not all(keys.values()):
+        return jsonify({"error": "Access Key, Secret Key, 업체코드를 모두 입력하세요"}), 400
+
+    if action == "test":
+        try:
+            CoupangClient(**keys).ping()
+        except (CoupangAPIError, OSError) as exc:
+            return jsonify({"error": f"연결 실패: {exc}"}), 502
+        return jsonify({"message": "연결 성공: 쿠팡 API 인증이 확인되었습니다"})
+
+    if action == "save":
+        cfg.update(keys)
+        save_config(cfg)
+        _apply_client(cfg)
+        return jsonify({"message": f"API 키를 저장했습니다 → {'실연동' if client.mode == 'live' else '모의'} 모드",
+                        "mode": client.mode})
+    return jsonify({"error": "알 수 없는 동작입니다"}), 400
+
+
+@app.route("/api/settings/rules", methods=["POST"])
+def api_settings_rules():
+    body = request.get_json(silent=True) or {}
+    base = str(body.get("public_base_url") or "").strip().rstrip("/")
+    try:  # 모두 검증한 뒤에 한꺼번에 반영 (일부만 바뀌는 일 방지)
+        interval = max(5, int(body.get("sync_interval_sec") or 30))
+        threshold = max(0, int(body.get("soldout_threshold") or 0))
+    except (TypeError, ValueError):
+        return jsonify({"error": "숫자를 입력하세요"}), 400
+    if base and not base.startswith(("http://", "https://")):
+        return jsonify({"error": "이미지 공개 주소는 http:// 또는 https:// 로 시작해야 합니다"}), 400
+    cfg.update(sync_interval_sec=interval, soldout_threshold=threshold,
+               auto_soldout=bool(body.get("auto_soldout")), public_base_url=base)
+    save_config(cfg)
+    return jsonify({"message": "자동화 설정을 저장했습니다"})
+
+
+@app.route("/api/settings/theme", methods=["POST"])
+def api_settings_theme():
+    theme = str((request.get_json(silent=True) or {}).get("theme") or "")
+    if theme not in THEMES:
+        return jsonify({"error": "화면 모드를 다시 고르세요"}), 400
+    cfg["theme"] = theme
+    save_config(cfg)
+    return jsonify({"message": f"화면 모드: {THEMES[theme]}"})
+
+
+@app.route("/api/settings/telegram", methods=["POST"])
+def api_settings_telegram():
+    """action: save · test · find_chat · clear. 토큰은 빈 칸이면 기존 값을 쓴다."""
+    body = request.get_json(silent=True) or {}
+    action = body.get("action")
+    old = cfg.get("telegram") or {}
+    tg = {
+        # 빈 토큰은 기존 값 유지 (토큰은 화면에 다시 보여주지 않는다)
+        "token": str(body.get("token") or "").strip() or old.get("token", ""),
+        "chat_id": str(body.get("chat_id") or "").strip(),
+        "enabled": bool(body.get("enabled")),
+        "topics": [t for t in (body.get("topics") or []) if t in TOPICS],
+        "frequency": body.get("frequency") if body.get("frequency") in FREQUENCIES else "realtime",
+        "send_from": str(body.get("send_from") or "00:00").strip() or "00:00",
+        "send_to": str(body.get("send_to") or "00:00").strip() or "00:00",
+        "outside": "drop" if body.get("outside") == "drop" else "hold",
+    }
+    try:
+        message, chats = _apply_telegram(action, tg)
+    except ValueError as exc:  # 내가 잘못 넣은 값
+        return jsonify({"error": str(exc)}), 400
+    except TelegramError as exc:  # 텔레그램 쪽 실패
+        return jsonify({"error": f"텔레그램: {exc}"}), 502
+    return jsonify({"message": message, "chats": chats})
+
+
 @app.route("/api/competitor-shop", methods=["POST"])
 def api_competitor_shop():
     """경쟁 판매자 샵 주소 등록/삭제 (업체코드 A00012345 또는 쿠팡 주소만)."""
@@ -803,9 +1119,157 @@ def api_competitor_shop():
     return jsonify({"seller": seller, "shop": url})
 
 
+@app.route("/api/dashboard")
+def api_dashboard():
+    """새 화면(/ui) 대시보드가 쓰는 데이터. 기존 dashboard() 뷰와 같은 값을 JSON 으로 준다.
+
+    두 화면이 서로 다른 숫자를 보이면 안 되므로 계산을 한 곳에 둔다.
+    """
+    items = store.items()
+    rows = _price_rows()
+    data = _dashboard_data(items, rows)
+    return jsonify({
+        "kpi": data["kpi"],
+        "featured": [
+            {
+                "vendor_item_id": r["vendor_item_id"], "name": r["name"],
+                "on_sale": bool(r["on_sale"]), "auto_stopped": bool(r["auto_stopped"]),
+                "sale_price": r["sale_price"], "stock": r["stock"],
+                "lowest": r["lowest"], "rank": r["rank"], "total": r["total"],
+            }
+            for r in data["featured"]
+        ],
+        "alerts": [
+            {"level": a["level"], "kind": a["kind"], "message": a["message"], "at": a["created_at"]}
+            for a in store.alerts(15)
+        ],
+        "prices": [
+            {
+                "vendor_item_id": r["vendor_item_id"], "name": r["name"], "featured": bool(r["featured"]),
+                "sale_price": r["sale_price"], "lowest": r["lowest"], "diff": r["diff"],
+                "rank": r["rank"], "total": r["total"],
+            }
+            for r in rows
+        ],
+        "soldout_threshold": cfg.get("soldout_threshold"),
+        "last_sync": sync.last_sync,
+        "sync_error": sync.last_error,
+    })
+
+
+# SQLite 는 참/거짓을 0/1 정수로 준다. 그대로 넘기면 받는 쪽이 boolean 인 줄 알고
+# 1 을 거짓으로 다룬다(React 컴포넌트가 실제로 그랬다). 경계에서 한 번 바꿔 둔다.
+_ITEM_FLAGS = ("on_sale", "featured", "auto_stopped", "auto_reprice")
+
+
+def _json_item(row: dict) -> dict:
+    return {**row, **{f: bool(row.get(f)) for f in _ITEM_FLAGS if f in row}}
+
+
 @app.route("/api/inventory")
 def api_inventory():
-    return jsonify({"last_sync": sync.last_sync, "error": sync.last_error, "items": store.items()})
+    return jsonify({
+        "last_sync": sync.last_sync,
+        "error": sync.last_error,
+        "items": [_json_item(i) for i in store.items()],
+    })
+
+
+# 새 화면(React)용 동작 경로. 몸통은 Jinja 화면과 같은 함수를 쓴다 — 한쪽만 고쳐지는 일을 막는다.
+@app.route("/api/items/<vid>/featured", methods=["POST"])
+def api_toggle_featured(vid):
+    if not store.item(vid):
+        return jsonify({"error": "없는 상품입니다"}), 404
+    _toggle_featured(vid)
+    return jsonify({"item": _json_item(_item_or_fail(vid))})
+
+
+@app.route("/api/items/<vid>/sale", methods=["POST"])
+def api_toggle_sale(vid):
+    if not store.item(vid):
+        return jsonify({"error": "없는 상품입니다"}), 404
+    try:
+        message = _toggle_sale(vid)
+    except CoupangAPIError as exc:
+        return jsonify({"error": str(exc)}), 502  # 쿠팡 쪽 실패는 우리 잘못이 아니다
+    return jsonify({"message": message, "item": _json_item(_item_or_fail(vid))})
+
+
+@app.route("/api/items/<vid>/stock", methods=["POST"])
+def api_update_stock(vid):
+    if not store.item(vid):
+        return jsonify({"error": "없는 상품입니다"}), 404
+    body = request.get_json(silent=True) or {}
+    try:
+        _update_stock(vid, str(body.get("stock", "")), str(body.get("low_stock", "")))
+    except ValueError:
+        return jsonify({"error": "재고와 기준은 숫자여야 합니다"}), 400
+    except CoupangAPIError as exc:
+        return jsonify({"error": str(exc)}), 502
+    return jsonify({"message": "재고 정보를 반영했습니다", "item": _json_item(_item_or_fail(vid))})
+
+
+@app.route("/api/items/delete", methods=["POST"])
+def api_delete_items():
+    """삭제는 되돌릴 수 없다. 기존 화면과 똑같이 '삭제' 를 받아 적게 한다."""
+    body = request.get_json(silent=True) or {}
+    spids = [str(s) for s in body.get("seller_product_id", []) if str(s).strip()]
+    if not spids:
+        return jsonify({"error": "삭제할 상품을 선택하세요"}), 400
+    if str(body.get("confirm", "")).strip() != "삭제":
+        return jsonify({"error": "확인 칸에 '삭제'를 정확히 입력해야 삭제됩니다"}), 400
+    results = [
+        {"name": name, "ok": ok, "message": msg}
+        for name, ok, msg in sync.delete_products(spids, stop_first=bool(body.get("stop_first")))
+    ]
+    return jsonify({"results": results})
+
+
+# ---------------- 새 화면 (React + Astryx) ----------------
+# 새 화면이 루트를 쓴다. 기존 Jinja 화면은 지우지 않고 /classic/ 으로 옮겨 남겨 뒀다 —
+# 장사 중이라 새 화면에 문제가 생기면 바로 돌아갈 곳이 있어야 한다.
+# 상품 등록만은 아직 기존 화면이 본체다(/register). 단계 14개·입력 칸 53개라 옮기는
+# 위험이 커서, 나머지를 먼저 넘기고 등록은 그대로 둔다.
+# 번들은 web/ 에서 `npm run build` 로 static/dist 에 만든다. 코드와 함께 배포되므로
+# BASE(소스 폴더) 기준이다 — DATA_DIR(사용자 데이터)이 아니다.
+SPA_DIR = BASE / "static" / "dist"
+
+# 새 화면이 가진 경로만 적는다. catch-all 을 쓰면 /api·/static·/uploads 와 오타 주소까지
+# 삼켜서, 없는 주소가 404 대신 빈 화면으로 보인다.
+SPA_ROUTES = ("/", "/inventory", "/prices", "/keywords", "/settings")
+
+
+# 한 함수에 라우트를 여러 개 달면 url_for("spa") 가 어느 주소를 고를지 알 수 없다 —
+# 실제로 /settings 를 골라서 '새 화면' 링크와 로그인 후 목적지가 설정으로 갔다.
+# 경로마다 endpoint 를 따로 주면 url_for("spa") 는 반드시 루트다.
+@app.route("/", endpoint="spa")
+@app.route("/inventory", endpoint="spa_inventory")
+@app.route("/prices", endpoint="spa_prices")
+@app.route("/keywords", endpoint="spa_keywords")
+@app.route("/settings", endpoint="spa_settings")
+def spa():
+    """SPA 진입점. 어느 경로로 들어와도 같은 index.html 을 주고, 라우터가 화면을 고른다."""
+    index = SPA_DIR / "index.html"
+    if not index.exists():
+        # 번들이 없으면 기존 화면으로 보낸다. 흰 화면보다 낫다.
+        return redirect(url_for("dashboard"))
+    # 저장된 화면 모드를 HTML 에 심어 보낸다. 받아서 고치면 첫 화면이 밝게 떴다가
+    # 어두워지는 번쩍임이 생긴다 — 그래서 왕복 없이 처음부터 넣어 준다.
+    html = index.read_text(encoding="utf-8")
+    mode = cfg.get("theme", "system")
+    if mode not in THEMES:
+        mode = "system"
+    html = html.replace("<head>", f'<head><meta name="wing-theme" content="{mode}">', 1)
+    return Response(html, mimetype="text/html")
+
+
+@app.route("/ui")
+@app.route("/ui/")
+@app.route("/ui/<path:rest>")
+def spa_moved(rest: str = ""):
+    """전환 전에 새 화면이 살던 자리. 북마크해 둔 주소를 깨지 않게 같은 화면으로 보낸다."""
+    target = "/" + rest
+    return redirect(target if target in SPA_ROUTES else "/", code=301)
 
 
 @app.route("/api/ping")
