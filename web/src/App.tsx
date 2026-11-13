@@ -19,6 +19,7 @@ import {
   MagnifyingGlassIcon,
   PlusCircleIcon,
   Cog6ToothIcon,
+  SparklesIcon,
 } from "@heroicons/react/24/outline";
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -26,6 +27,7 @@ const Inventory = lazy(() => import("./pages/Inventory"));
 const Prices = lazy(() => import("./pages/Prices"));
 const Keywords = lazy(() => import("./pages/Keywords"));
 const Settings = lazy(() => import("./pages/Settings"));
+const Register = lazy(() => import("./pages/Register"));
 
 /**
  * 메뉴 — 기존 화면과 경로·순서·이름을 맞춘다.
@@ -37,8 +39,9 @@ const NAV = [
   {href: "/inventory", label: "재고 관리", icon: ArchiveBoxIcon},
   {href: "/prices", label: "경쟁가 비교", icon: ArrowTrendingUpIcon},
   {href: "/keywords", label: "실시간 검색어", icon: MagnifyingGlassIcon},
-  // 상품 등록은 아직 기존 Jinja 화면이다. SPA 안의 경로가 아니므로 바깥으로 보낸다.
+  // 기존 등록 화면이 아직 본체다(완성된 쪽). 새 마법사는 /register/new 에서 만드는 중.
   {href: "/register", label: "상품 등록", icon: PlusCircleIcon, isExternal: true},
+  {href: "/register/new", label: "상품 등록 (새 화면)", icon: SparklesIcon},
   {href: "/settings", label: "설정", icon: Cog6ToothIcon},
 ];
 
@@ -97,6 +100,7 @@ function Shell() {
           <Route path="/prices" element={<Prices />} />
           <Route path="/keywords" element={<Keywords />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/register/new" element={<Register />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>

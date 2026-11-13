@@ -1,5 +1,6 @@
 # Docker 이미지: linux/amd64 · linux/arm64 · linux/arm/v7 를 한 이름으로 GitHub Container Registry 에 올린다.
 # - 태그(v*)를 올리면: ghcr.io/<owner>/cupang-agent:<버전> 과 :latest
+#   (베타처럼 '-' 가 든 태그는 버전 태그만 올리고 :latest 는 그대로 둔다)
 # - Actions 탭에서 수동 실행하면: :edge
 name: docker
 
@@ -27,7 +28,7 @@ jobs:
           for i in $(seq 1 40); do curl -sf http://127.0.0.1:26118/api/ping && break; sleep 1; done
           code=$(docker logs wing 2>&1 | grep -o "설정 코드: [0-9A-F]*" | tail -1 | awk '{print $3}')
           curl -s -c jar -b jar -o /dev/null -d "code=$code&user=ci-check&password=ci-check-pass1&confirm=ci-check-pass1" http://127.0.0.1:26118/setup
-          for u in / /inventory /prices /keywords /register /settings /static/dark.css; do
+          for u in / /inventory /prices /keywords /register /register/new /settings /classic/ /static/dark.css; do
             c=$(curl -s -b jar -o /dev/null -w "%{http_code}" "http://127.0.0.1:26118$u"); echo "$c $u"; [ "$c" = 200 ]
           done
           docker logs wing | tail -20
@@ -50,7 +51,9 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            # 베타(v0.11.0-beta.1 처럼 '-' 가 든 태그)는 latest 를 옮기지 않는다.
+            # compose 가 :latest 를 쓰므로, 옮기면 베타가 모두의 운영 이미지가 된다.
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-') }}
             type=raw,value=edge,enable=${{ github.event_name == 'workflow_dispatch' }}
 
       - uses: docker/build-push-action@v6

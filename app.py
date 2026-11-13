@@ -1236,7 +1236,7 @@ SPA_DIR = BASE / "static" / "dist"
 
 # 새 화면이 가진 경로만 적는다. catch-all 을 쓰면 /api·/static·/uploads 와 오타 주소까지
 # 삼켜서, 없는 주소가 404 대신 빈 화면으로 보인다.
-SPA_ROUTES = ("/", "/inventory", "/prices", "/keywords", "/settings")
+SPA_ROUTES = ("/", "/inventory", "/prices", "/keywords", "/settings", "/register/new")
 
 
 # 한 함수에 라우트를 여러 개 달면 url_for("spa") 가 어느 주소를 고를지 알 수 없다 —
@@ -1247,6 +1247,9 @@ SPA_ROUTES = ("/", "/inventory", "/prices", "/keywords", "/settings")
 @app.route("/prices", endpoint="spa_prices")
 @app.route("/keywords", endpoint="spa_keywords")
 @app.route("/settings", endpoint="spa_settings")
+# 상품 등록은 기존 Jinja 화면(/register)이 아직 본체다 — 단계 14개를 다 옮기기 전에
+# 루트를 넘기면 장사에 쓰는 등록이 반쪽이 된다. 새 마법사는 여기서 만들어 간다.
+@app.route("/register/new", endpoint="spa_register")
 def spa():
     """SPA 진입점. 어느 경로로 들어와도 같은 index.html 을 주고, 라우터가 화면을 고른다."""
     index = SPA_DIR / "index.html"
