@@ -1233,6 +1233,7 @@ SPA_DIR = BASE / "static" / "dist"
 
 
 @app.route("/ui")
+@app.route("/ui/")  # <path:_rest> 는 빈 문자열을 받지 않는다 — '/ui/' 가 404 였다
 @app.route("/ui/<path:_rest>")
 def spa(_rest: str = ""):
     """SPA 진입점. 경로는 브라우저 라우터가 처리하므로 어떤 하위 경로든 index.html 을 준다."""
@@ -1244,7 +1245,14 @@ def spa(_rest: str = ""):
             '<p><a href="/">기존 화면으로</a></p>',
             503,
         )
-    return send_from_directory(SPA_DIR, "index.html")
+    # 저장된 화면 모드를 HTML 에 심어 보낸다. 받아서 고치면 첫 화면이 밝게 떴다가
+    # 어두워지는 번쩍임이 생긴다 — 그래서 왕복 없이 처음부터 넣어 준다.
+    html = index.read_text(encoding="utf-8")
+    mode = cfg.get("theme", "system")
+    if mode not in THEMES:
+        mode = "system"
+    html = html.replace("<head>", f'<head><meta name="wing-theme" content="{mode}">', 1)
+    return Response(html, mimetype="text/html")
 
 
 @app.route("/api/ping")

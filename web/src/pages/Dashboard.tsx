@@ -17,10 +17,12 @@ import {Badge} from "@astryxdesign/core/Badge";
 import {StatusDot} from "@astryxdesign/core/StatusDot";
 import {List, ListItem} from "@astryxdesign/core/List";
 import {Table, proportional, pixel} from "@astryxdesign/core/Table";
+import type {TableColumn} from "@astryxdesign/core/Table";
 import {EmptyState} from "@astryxdesign/core/EmptyState";
 import {Spinner} from "@astryxdesign/core/Spinner";
 import {Divider} from "@astryxdesign/core/Divider";
 import {fetchDashboard, won, AuthError} from "../api";
+import {useIsNarrow} from "../use-narrow";
 import type {Alert, DashboardData, FeaturedItem, PriceRow} from "../api";
 
 /**
@@ -143,40 +145,45 @@ function Alerts({alerts}: {alerts: Alert[]}) {
 
 type PriceTableRow = PriceRow & Record<string, unknown>;
 
-function PriceTable({rows}: {rows: PriceRow[]}) {
-  return (
-    <Table
-      data={rows as PriceTableRow[]}
-      columns={[
+function PriceTable({rows, isNarrow}: {rows: PriceRow[]; isNarrow: boolean}) {
+  // 좁은 화면에서는 '경쟁 최저' 와 '순위' 가 화면 밖으로 밀려 안 보였다.
+  // 차이 배지가 심각도를 담고 있으니, 폰에서는 상품·내 가격·차이만 남긴다.
+  // 배열로 빼면 align 이 넓은 string 으로 추론된다. 타입을 못박는다.
+  const columns: TableColumn<PriceTableRow>[] = [
         {
           key: "name",
           header: "상품",
           width: proportional(3),
+          // 폰에서 상품명이 4글자로 잘려 구분이 안 됐다 → 두 줄까지 허용
           renderCell: (r: PriceTableRow) => (
             <HStack gap={1.5} align="center">
               {r.featured ? <Badge variant="info" label="주력" /> : null}
-              <Text maxLines={1}>{r.name}</Text>
+              <Text maxLines={isNarrow ? 2 : 1}>{r.name}</Text>
             </HStack>
           ),
         },
         {
           key: "sale_price",
           header: "내 가격",
-          align: "end",
+          align: "end" as const,
           width: pixel(110),
           renderCell: (r: PriceTableRow) => <Text textWrap="nowrap">{won(r.sale_price)}</Text>,
         },
-        {
-          key: "lowest",
-          header: "경쟁 최저",
-          align: "end",
-          width: pixel(110),
-          renderCell: (r: PriceTableRow) => <Text textWrap="nowrap">{r.lowest === null ? "-" : won(r.lowest)}</Text>,
-        },
+        ...(isNarrow
+          ? []
+          : [{
+              key: "lowest",
+              header: "경쟁 최저",
+              align: "end" as const,
+              width: pixel(110),
+              renderCell: (r: PriceTableRow) => (
+                <Text textWrap="nowrap">{r.lowest === null ? "-" : won(r.lowest)}</Text>
+              ),
+            }]),
         {
           key: "diff",
           header: "차이",
-          align: "end",
+          align: "end" as const,
           width: pixel(120),
           // 전부 빨강이면 심각도가 안 보인다. 내 가격의 10% 이상 밀렸을 때만 빨강,
           // 그보다 적게 밀렸으면 주황, 내가 더 싸면 초록.
@@ -190,25 +197,27 @@ function PriceTable({rows}: {rows: PriceRow[]}) {
               />
             ),
         },
-        {
-          key: "rank",
-          header: "순위",
-          align: "center",
-          width: pixel(90),
-          // 1등은 초록, 꼴등은 빨강, 그 사이는 중립. 2/6 까지 빨강일 이유가 없다.
-          renderCell: (r: PriceTableRow) => (
-            <Badge
-              variant={r.rank === 1 ? "success" : r.rank === r.total ? "error" : "neutral"}
-              label={`${r.rank}/${r.total}`}
-            />
-          ),
-        },
-      ]}
-    />
-  );
+        ...(isNarrow
+          ? []
+          : [{
+              key: "rank",
+              header: "순위",
+              align: "center" as const,
+              width: pixel(90),
+              // 1등은 초록, 꼴등은 빨강, 그 사이는 중립. 2/6 까지 빨강일 이유가 없다.
+              renderCell: (r: PriceTableRow) => (
+                <Badge
+                  variant={r.rank === 1 ? "success" : r.rank === r.total ? "error" : "neutral"}
+                  label={`${r.rank}/${r.total}`}
+                />
+              ),
+            }]),
+  ];
+  return <Table data={rows as PriceTableRow[]} columns={columns} />;
 }
 
 export default function Dashboard() {
+  const isNarrow = useIsNarrow();
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -255,12 +264,8 @@ export default function Dashboard() {
 
   const {kpi, featured, alerts, prices, soldout_threshold: threshold} = data;
 
-  return (
-    // Grid 3열 + span 2 로는 레일이 자기 내용만큼 벌어져 본문과 반반이 됐다(실측 650:590).
-    // 본문은 남는 폭을 다 쓰고(StackItem fill), 레일은 400px 로 못박는다.
-    <HStack gap={0}>
-      <StackItem size="fill">
-        <Section padding={6}>
+  const main = (
+    <Section padding={6}>
         <VStack gap={6}>
           <VStack gap={1}>
             <Heading level={1}>대시보드</Heading>
@@ -274,11 +279,13 @@ export default function Dashboard() {
             </HStack>
           </VStack>
 
-          {/* auto-fit 으로 두면 5+1 로 쪼개져 한 칸이 외톨이가 된다. 3×2 로 못박는다. */}
-          <Grid columns={3} gap={3}>
+          {/* auto-fit 은 데스크톱에서 5+1 로 쪼개져 외톨이가 생긴다. 폭에 따라 못박는다.
+              390px 에서 3열은 화면을 넘고 라벨이 잘렸다. */}
+          <Grid columns={isNarrow ? 2 : 3} gap={3}>
             <Kpi label="판매 옵션 수" value={`${kpi.total}`} />
             <Kpi label="재고 금액" value={won(kpi.stock_value)} />
-            <Kpi label="재고 부족" value={`${kpi.low}`} isBad={kpi.low > 0} />
+            {/* 판매중인 것만 센다 — 자동품절된 0개 재고는 아래 품절 칸으로 간다 */}
+            <Kpi label="재고 부족(판매중)" value={`${kpi.low}`} isBad={kpi.low > 0} />
             <Kpi label="품절·판매중지" value={`${kpi.soldout}`} isBad={kpi.soldout > 0} />
             <Kpi label="최저가 밀림" value={`${kpi.undercut}`} isBad={kpi.undercut > 0} />
             <Kpi label="자동 가격조정 ON" value={`${kpi.auto}`} />
@@ -312,12 +319,28 @@ export default function Dashboard() {
 
           <VStack gap={3}>
             <Heading level={2}>가격 경쟁 현황</Heading>
-            <PriceTable rows={prices} />
+            <PriceTable rows={prices} isNarrow={isNarrow} />
           </VStack>
         </VStack>
-        </Section>
-      </StackItem>
+    </Section>
+  );
 
+  // 좁은 화면에서는 레일을 아래로 쌓는다. 나란히 두면 본문이 짜부라져
+  // 제목이 한 글자씩 쪼개진다 (390px 에서 실측 128px).
+  if (isNarrow) {
+    return (
+      <VStack gap={0}>
+        {main}
+        <Section padding={6} variant="section" dividers={["start"]}>
+          <Alerts alerts={alerts} />
+        </Section>
+      </VStack>
+    );
+  }
+
+  return (
+    <HStack gap={0}>
+      <StackItem size="fill">{main}</StackItem>
       <Section padding={6} variant="section" dividers={["start"]} width={340}>
         <Alerts alerts={alerts} />
       </Section>

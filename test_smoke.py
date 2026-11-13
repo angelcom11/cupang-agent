@@ -132,6 +132,23 @@ def test_spa_is_served_at_ui_and_still_needs_login():
         A.app.config["WING_LOGIN_REQUIRED"] = False
 
 
+def test_spa_answers_every_path_shape_including_a_trailing_slash():
+    """'/ui/' 는 <path:_rest> 가 빈 문자열을 받지 않아 404 였다. 북마크하면 404 를 본다."""
+    c = A.app.test_client()
+    for path in ("/ui", "/ui/", "/ui/inventory", "/ui/prices/"):
+        assert c.get(path).status_code == 200, f"{path} 가 404 다"
+
+
+def test_spa_html_carries_the_saved_theme_so_it_does_not_flash():
+    """모드를 API 로 받아서 고치면 밝게 떴다가 어두워진다. HTML 에 심어 보낸다."""
+    c = A.app.test_client()
+    A.cfg["theme"] = "dark"
+    assert '<meta name="wing-theme" content="dark">' in c.get("/ui").get_data(as_text=True)
+    A.cfg["theme"] = "네온"  # 알 수 없는 값은 system 으로 떨어진다
+    assert 'content="system"' in c.get("/ui").get_data(as_text=True)
+    A.cfg.pop("theme", None)
+
+
 def test_existing_pages_untouched_while_spa_coexists():
     """전환 중에는 기존 Jinja 화면이 그대로 떠야 한다."""
     c = A.app.test_client()

@@ -35,6 +35,8 @@ import {
   settingsTheme,
 } from "../api";
 import type {SettingsData, TelegramChat} from "../api";
+import {setThemeMode} from "../theme-mode";
+import type {ThemeMode} from "../theme-mode";
 
 /** 글상자 한 가지 폭. 키·토큰·주소가 다 들어간다. */
 const FIELD = 480;
@@ -340,6 +342,7 @@ export default function Settings() {
                 void (async () => {
                   try {
                     const {message} = await settingsTheme(v);
+                    setThemeMode(v as ThemeMode);  // 새 화면도 바로 바뀐다
                     setNotice({status: "success", title: message});
                     await reload();
                   } catch (e) {
@@ -349,12 +352,7 @@ export default function Settings() {
               }}
             >
               {data.themes.map((t) => (
-                // 다크를 골랐는데 /ui 가 밝으면 고장으로 읽힌다. 라디오 옆에 바로 적는다.
-                <RadioListItem
-                  key={t.id}
-                  value={t.id}
-                  label={t.id === "dark" ? `${t.label} (새 화면은 아직 미적용)` : t.label}
-                />
+                <RadioListItem key={t.id} value={t.id} label={t.label} />
               ))}
             </RadioList>
             <Text size="sm" color="secondary">
