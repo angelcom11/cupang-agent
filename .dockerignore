@@ -13,6 +13,9 @@ __pycache__/
 *.log
 build/
 dist/
+# 번들은 Dockerfile 의 web 단계가 만든다. 내 PC 에 남은 낡은 dist 가 섞이면 안 된다.
+static/dist/
+web/node_modules/
 *.spec
 .git/
 .github/
