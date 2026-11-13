@@ -142,6 +142,15 @@ def test_links_to_the_new_ui_point_at_the_root():
         assert A.url_for("spa") == "/"
 
 
+def test_the_new_wizard_has_its_own_path_and_register_stays_the_old_screen():
+    """등록은 장사에 매일 쓴다. 마법사를 다 만들기 전에 /register 를 넘기면 안 된다."""
+    c = A.app.test_client()
+    assert c.get("/register/new").status_code == 200          # 새 마법사 (SPA)
+    old = c.get("/register")
+    assert old.status_code == 200
+    assert "wing-theme" not in old.get_data(as_text=True), "/register 는 아직 기존 Jinja 화면이다"
+
+
 def test_classic_pages_stay_reachable_as_a_way_back():
     """기존 화면을 지우지 않고 /classic/ 에 남겼다. 새 화면이 고장나면 돌아갈 곳이다."""
     c = A.app.test_client()

@@ -22,7 +22,8 @@ import {EmptyState} from "@astryxdesign/core/EmptyState";
 import {Spinner} from "@astryxdesign/core/Spinner";
 import {Divider} from "@astryxdesign/core/Divider";
 import {fetchDashboard, won, AuthError} from "../api";
-import {useIsNarrow} from "../use-narrow";
+import {useMediaQuery} from "@astryxdesign/core/hooks";
+import {NARROW_QUERY} from "../narrow";
 import type {Alert, DashboardData, FeaturedItem, PriceRow} from "../api";
 
 /**
@@ -224,7 +225,7 @@ function PriceTable({rows, isNarrow}: {rows: PriceRow[]; isNarrow: boolean}) {
 }
 
 export default function Dashboard() {
-  const isNarrow = useIsNarrow();
+  const isNarrow = useMediaQuery(NARROW_QUERY);
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState<string | null>(null);
 

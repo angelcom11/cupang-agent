@@ -294,3 +294,115 @@ export const deleteItems = (sellerProductIds: string[], confirm: string, stopFir
 
 /** 1,234 처럼 세 자리마다 쉼표. 기존 화면의 '{:,}' 포맷과 같게 보이도록. */
 export const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
+
+// ---------------- 상품 등록 마법사 ----------------
+// 단계·기본값·검증은 서버(product_form.py)가 갖고 있다. 여기서 다시 정의하지 않는다.
+
+/** 검증 오류 하나. step/sub 는 '어디서 고치는지' 다 — 마법사가 그 단계로 데려간다. */
+export interface RegisterError {
+  message: string;
+  step: string;
+  sub: number;
+}
+
+/**
+ * 검증 실패는 보통의 요청 실패가 아니다. 서버가 400 과 함께 고칠 목록을 주는데,
+ * post() 는 error 필드만 보고 그 목록을 버린다 — 마법사에는 그게 본문이다.
+ */
+export class RegisterInvalid extends Error {
+  readonly errors: RegisterError[];
+  constructor(errors: RegisterError[]) {
+    super("고칠 곳이 있습니다");
+    this.name = "RegisterInvalid";
+    this.errors = errors;
+  }
+}
+
+export interface ShippingPlace {
+  code: string;
+  name: string;
+  address: string;
+  usable: boolean;
+}
+
+export interface RegisterDraft {
+  id: number;
+  name: string;
+  note: string | null;
+  updated_at: string;
+}
+
+export type RegisterForm = Record<string, unknown>;
+
+export interface RegisterMeta {
+  steps: {id: string; label: string}[];
+  main_subs: string[];
+  form: RegisterForm;
+  drafts: RegisterDraft[];
+  /** 키는 outbound 와 returns 다 (return 이 아니다). errors 는 목록을 못 불러온 이유. */
+  places: {outbound: ShippingPlace[]; returns: ShippingPlace[]; errors: string[]};
+  has_saved_defaults: boolean;
+  max_detail_images: number;
+  mode: "mock" | "live";
+}
+
+/** 등록 API 전용 POST. 400 + {errors:[…]} 를 RegisterInvalid 로 바꿔 목록을 살려 보낸다. */
+async function postRegister<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: {Accept: "application/json", "Content-Type": "application/json"},
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401) throw new AuthError("로그인이 필요합니다");
+  const data: unknown = await res.json().catch(() => null);
+  if (!res.ok) {
+    if (data !== null && typeof data === "object" && "errors" in data) {
+      const list = (data as {errors: unknown}).errors;
+      if (Array.isArray(list) && list.length > 0) throw new RegisterInvalid(list as RegisterError[]);
+    }
+    const reason =
+      data !== null && typeof data === "object" && "error" in data
+        ? String((data as {error: unknown}).error)
+        : `요청 실패 (HTTP ${res.status})`;
+    throw new Error(reason);
+  }
+  return data as T;
+}
+
+export const fetchRegisterMeta = () => get<RegisterMeta>("/api/register/meta");
+
+/** 검증만. 200 으로 오고 errors 가 빈 배열이면 통과다. */
+export const registerValidate = (form: RegisterForm) =>
+  postRegister<{errors: RegisterError[]; form: RegisterForm}>("/api/register/validate", form);
+
+/** 쿠팡에 보낼 본문을 그대로 돌려준다. 보내기 전에 눈으로 확인하는 자리다. */
+export const registerPreview = (form: RegisterForm) =>
+  postRegister<{errors: RegisterError[]; payload: unknown}>("/api/register/preview", form);
+
+/** save=쿠팡에 임시저장 · request=바로 판매요청. WING 의 두 버튼과 같다. */
+export const registerSubmit = (
+  form: RegisterForm,
+  action: "save" | "request",
+  draftId: number | null,
+  rememberDefaults: boolean,
+) =>
+  postRegister<{message: string; draft_id: number}>("/api/register/submit", {
+    ...form,
+    action,
+    draft_id: draftId,
+    remember_defaults: rememberDefaults,
+  });
+
+/** 내 서버에만 저장. 필수값이 없어도 언제든 된다 (기존 화면과 같다). */
+export const saveRegisterDraft = (
+  form: RegisterForm,
+  draftId: number | null,
+  rememberDefaults: boolean,
+) =>
+  postRegister<{message: string; draft_id: number; drafts: RegisterDraft[]}>(
+    "/api/register/draft",
+    {...form, draft_id: draftId, remember_defaults: rememberDefaults},
+  );
+
+export const loadRegisterDraft = (draftId: number) =>
+  get<{draft_id: number; form: RegisterForm}>(`/api/register/draft/${draftId}`);

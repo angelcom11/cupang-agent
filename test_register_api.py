@@ -3,6 +3,7 @@
 검증·요청본문 만들기는 product_form.py 를 그대로 쓴다. 규칙이 두 벌로 갈라지면
 한쪽만 고쳐지는 사고가 나므로, 여기서는 "같은 규칙이 JSON 경로로도 나오는지" 를 본다.
 """
+import json
 import os
 import tempfile
 
@@ -53,6 +54,29 @@ def test_meta_gives_the_wizard_its_steps_and_an_empty_form():
     assert d["steps"][0]["label"] == "노출상품명"
     assert d["form"], "빈 폼의 기본값이 와야 한다"
     assert "outbound" in d["places"] and "returns" in d["places"]
+
+
+def test_submit_refusal_carries_the_steps_too_not_just_a_message():
+    """마법사는 400 의 errors 로 고칠 단계를 찾는다.
+
+    error 한 줄만 주면 '뭐가 틀렸는지는 아는데 어디서 고치는지 모르는' 상태가 된다.
+    """
+    r = _client().post("/api/register/submit", json={"action": "request"})
+    assert r.status_code == 400
+    body = r.get_json()
+    assert "errors" in body, "errors 목록이 없으면 마법사가 단계로 데려가지 못한다"
+    assert all(e["step"] in pf.STEP_IDS for e in body["errors"])
+
+
+def test_option_rows_carry_every_field_the_wizard_edits():
+    """화면이 고치는 칸과 payload 가 읽는 칸이 어긋나면 입력이 조용히 사라진다."""
+    form = _good_form()
+    form["options"][0].update(model_no="M-1", barcode="8801234567890", sku="TB-1")
+    r = _client().post("/api/register/preview", json=form)
+    assert r.status_code == 200, r.get_json()
+    sent = json.dumps(r.get_json()["payload"], ensure_ascii=False)
+    for value in ("M-1", "8801234567890", "TB-1"):
+        assert value in sent, f"{value} 이(가) 쿠팡에 보낼 본문에 없다"
 
 
 def test_every_validation_error_carries_the_step_that_fixes_it():
