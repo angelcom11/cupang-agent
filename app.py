@@ -533,17 +533,25 @@ def csv_template_download():
                     headers={"Content-Disposition": "attachment; filename=coupang_products_template.csv"})
 
 
-def _submit(name: str, payload: dict) -> tuple[bool, str]:
+def _submit_quiet(name: str, payload: dict) -> tuple[bool, str]:
+    """쿠팡에 등록하고 이력을 남긴다. 화면 안내는 하지 않는다 — 호출자가 한다.
+
+    JSON 경로(/api/register/submit)는 flash 를 쓸 수 없으므로 여기서 떼어 놓는다.
+    """
     try:
         res = client.create_product(payload)
         msg = ("[모의] " if client.mode == "mock" else "") + f"등록 완료 sellerProductId={res.get('data')}"
         store.log_registration(name, True, msg, payload, mode=client.mode, seller_product_id=res.get("data"))
-        flash(f"'{name}' {msg}", "info")
         return True, msg
     except CoupangAPIError as exc:
         store.log_registration(name, False, str(exc), payload, mode=client.mode)
-        flash(f"'{name}' 등록 실패: {exc}", "danger")
         return False, str(exc)
+
+
+def _submit(name: str, payload: dict) -> tuple[bool, str]:
+    ok, msg = _submit_quiet(name, payload)
+    flash(f"'{name}' {msg}" if ok else f"'{name}' 등록 실패: {msg}", "info" if ok else "danger")
+    return ok, msg
 
 
 def _register_csv(file, request_approval: bool):
@@ -857,6 +865,110 @@ def api_keyword_suggest():
     return jsonify({"query": keywords.base_keyword(name), "limit": keywords.MAX_TAGS, "room": room,
                     "suggestions": suggestions, "errors": errors,
                     "mock": getattr(keyword_provider, "name", "") == "mock"})
+
+
+# ---- 상품 등록 (새 화면) ----
+# 단계 정의·검증·요청본문 만들기는 product_form.py 에 이미 있다. 그대로 쓴다 —
+# 검증 규칙이 두 벌로 갈라지면 한쪽만 고쳐지는 사고가 난다.
+@app.route("/api/register/meta")
+def api_register_meta():
+    """마법사가 처음에 받아가는 것: 단계 목록, 빈 폼의 기본값, 임시저장·이력, 출고지/반품지."""
+    places = shipping_places()
+    return jsonify({
+        "steps": [{"id": k, "label": v} for k, v in pf.STEPS],
+        "main_subs": pf.MAIN_SUBS,
+        "form": pf.normalize_form({}, pf.defaults_from_config(cfg)),
+        "json_keys": sorted(pf.JSON_KEYS),
+        "drafts": store.drafts(),
+        "history": store.registrations(),
+        "categories": categories.summary(),
+        "places": places,
+        "public_base_url": cfg.get("public_base_url", ""),
+        "has_saved_defaults": bool(cfg.get("register_defaults")),
+        "max_detail_images": pf.MAX_DETAIL_IMAGES,
+        "mode": client.mode,
+    })
+
+
+def _register_form(body: dict) -> dict:
+    """JSON 본문을 폼 모양으로 맞춘다. 기존 _form_data 와 같은 정규화를 거친다."""
+    return pf.normalize_form({k: v for k, v in body.items() if k != "action"},
+                             pf.defaults_from_config(cfg))
+
+
+def _register_errors(form: dict) -> tuple[list[dict], dict | None]:
+    """검증 결과. 오류마다 고칠 단계를 붙여 보낸다 — 마법사가 그 단계로 데려간다."""
+    meta = category_meta(form.get("category_code"))
+    errors = validate_form(form, categories, meta)
+    if meta is None and form.get("category_code"):
+        errors.append("카테고리 정보(필수 옵션·고시정보)를 쿠팡에서 불러오지 못했습니다. 잠시 후 다시 시도하세요")
+    return ([{"message": e, "step": pf.step_of_error(e), "sub": pf.sub_of_error(e)} for e in errors], meta)
+
+
+@app.route("/api/register/validate", methods=["POST"])
+def api_register_validate():
+    form = _register_form(request.get_json(silent=True) or {})
+    errors, _ = _register_errors(form)
+    return jsonify({"errors": errors, "form": form})
+
+
+@app.route("/api/register/preview", methods=["POST"])
+def api_register_preview():
+    """쿠팡에 보낼 요청 본문을 그대로 보여준다. 보내기 전에 눈으로 확인하는 자리다."""
+    form = _register_form(request.get_json(silent=True) or {})
+    errors, meta = _register_errors(form)
+    if errors:
+        return jsonify({"errors": errors}), 400
+    payload = build_product_payload(form, cfg.get("vendor_id", "A00000000"), False, meta)
+    return jsonify({"errors": [], "payload": payload})
+
+
+@app.route("/api/register/submit", methods=["POST"])
+def api_register_submit():
+    """action: save(쿠팡에 임시저장) · request(바로 판매요청). WING 의 두 버튼과 같다."""
+    body = request.get_json(silent=True) or {}
+    action = body.get("action")
+    if action not in ("save", "request"):
+        return jsonify({"error": "save 또는 request 여야 합니다"}), 400
+    form = _register_form(body)
+    errors, meta = _register_errors(form)
+    if errors:
+        return jsonify({"errors": errors}), 400
+    if body.get("remember_defaults"):
+        _remember_defaults(form)
+    payload = build_product_payload(form, cfg.get("vendor_id", "A00000000"), action == "request", meta)
+    name = product_names(form)[0]
+    ok, message = _submit_quiet(name, payload)
+    if not ok:
+        return jsonify({"error": f"'{name}' 등록 실패: {message}"}), 502
+    # 보낸 내용도 임시저장에 남겨 이어서 고칠 수 있게 한다 (기존 화면과 같다)
+    draft_id = store.save_draft(form, body.get("draft_id"), note=message)
+    return jsonify({"message": f"'{name}' {message}", "draft_id": draft_id,
+                    "history": store.registrations()})
+
+
+@app.route("/api/register/draft", methods=["POST"])
+def api_register_draft():
+    """임시저장. 필수값이 없어도 언제든 저장된다 (기존 화면과 같다)."""
+    body = request.get_json(silent=True) or {}
+    form = _register_form(body)
+    if body.get("remember_defaults"):
+        _remember_defaults(form)
+    draft_id = store.save_draft(form, body.get("draft_id"))
+    return jsonify({"message": f"임시저장했습니다: {product_names(form)[0] or '(이름 없음)'}",
+                    "draft_id": draft_id, "drafts": store.drafts()})
+
+
+@app.route("/api/register/draft/<int:draft_id>")
+def api_register_draft_load(draft_id):
+    d = store.draft(draft_id)
+    if not d:
+        return jsonify({"error": "없는 임시저장입니다"}), 404
+    form = d["data"]
+    if "display_name" not in form:  # 상품명이 하나였던 이전 임시저장 → 노출상품명으로 옮김
+        form = {**form, "display_name": form.get("name", ""), "name": ""}
+    return jsonify({"draft_id": draft_id,
+                    "form": pf.normalize_form(form, pf.defaults_from_config(cfg))})
 
 
 # ---- 설정 (새 화면) ----
