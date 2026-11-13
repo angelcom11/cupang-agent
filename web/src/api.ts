@@ -121,6 +121,76 @@ export const saveStock = (vid: string, stock: string, lowStock: string) =>
     low_stock: lowStock,
   });
 
+/** 설정 화면. 비밀값은 서버가 내보내지 않는다 — 있는지 여부만 온다. */
+export interface SettingsKeys {
+  access_key: string;
+  has_secret_key: boolean;
+  vendor_id: string;
+  mode: "mock" | "live";
+}
+
+export interface SettingsRules {
+  sync_interval_sec: number;
+  soldout_threshold: number;
+  auto_soldout: boolean;
+  public_base_url: string;
+}
+
+export interface TelegramSettings {
+  has_token: boolean;
+  chat_id: string;
+  enabled: boolean;
+  topics: string[];
+  frequency: string;
+  send_from: string;
+  send_to: string;
+  outside: "hold" | "drop";
+  pending: number;
+  window_open: boolean;
+  last_result: string | null;
+}
+
+export interface IdLabel {
+  id: string;
+  label: string;
+}
+
+export interface TelegramChat {
+  id: string;
+  title: string;
+}
+
+export interface SettingsData {
+  keys: SettingsKeys;
+  rules: SettingsRules;
+  theme: string;
+  themes: IdLabel[];
+  telegram: TelegramSettings;
+  topics: IdLabel[];
+  frequencies: IdLabel[];
+  categories: {count: number; leaves: number; source: string; updated_at: string; full: boolean};
+  mock_competitor_live: boolean;
+}
+
+export const fetchSettings = () => get<SettingsData>("/api/settings");
+
+/** action: test(연결 확인) · save · clear. 빈 칸은 서버가 기존 값으로 채운다. */
+export const settingsKeys = (
+  action: "test" | "save" | "clear",
+  keys: {access_key?: string; secret_key?: string; vendor_id?: string},
+) => post<{message: string; mode?: string}>("/api/settings/keys", {action, ...keys});
+
+export const settingsRules = (rules: SettingsRules) =>
+  post<{message: string}>("/api/settings/rules", rules);
+
+export const settingsTheme = (theme: string) =>
+  post<{message: string}>("/api/settings/theme", {theme});
+
+export const settingsTelegram = (
+  action: "save" | "test" | "find_chat" | "clear",
+  tg: Partial<TelegramSettings> & {token?: string},
+) => post<{message: string; chats: TelegramChat[] | null}>("/api/settings/telegram", {action, ...tg});
+
 /** 경쟁 판매자 한 곳의 호가. */
 export interface Competitor {
   seller: string;

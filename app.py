@@ -724,44 +724,56 @@ def _tg_form() -> dict:
     }
 
 
+def _apply_telegram(action: str | None, tg: dict) -> tuple[str, list[dict] | None]:
+    """텔레그램 설정 동작. 사람이 읽을 결과 문구와, 찾은 대화 목록(find_chat 일 때)을 돌려준다.
+
+    Jinja 화면과 새 화면(/ui)이 같이 쓴다.
+    입력이 잘못된 것은 ValueError, 텔레그램 쪽 실패는 TelegramError 로 올린다 —
+    새 화면이 400 과 502 를 가려 쓴다 (502 는 상대 서버 탓이라는 뜻이다).
+    """
+    if action != "clear" and not (TIME_RE.match(tg["send_from"]) and TIME_RE.match(tg["send_to"])):
+        raise ValueError("보낼 시간대는 00:00 ~ 23:59 형식으로 입력하세요")
+    if action == "clear":
+        cfg.pop("telegram", None)
+        save_config(cfg)
+        return "텔레그램 연결을 해제했습니다", None
+    if not tg["token"]:
+        raise ValueError("봇 토큰을 입력하세요")
+    if action == "find_chat":
+        chats = find_chats(tg["token"])
+        if not chats:
+            raise TelegramError("봇에게 온 메시지가 없습니다. 텔레그램에서 봇에게 아무 메시지나 보낸 뒤 다시 눌러 주세요")
+        cfg["telegram"] = {**tg, "chat_id": tg["chat_id"] or chats[0]["id"]}
+        save_config(cfg)
+        return f"대화 {len(chats)}개를 찾았습니다. 알림 받을 대화를 확인하세요", chats
+    if action == "test":
+        if not tg["chat_id"]:
+            raise ValueError("대화 ID(chat id)를 입력하거나 '대화 찾기'를 눌러 주세요")
+        notifier.send_now("✅ WING 매니저 텔레그램 연결 테스트입니다.", tg["token"], tg["chat_id"])
+        notifier.record(True, f"{datetime.now():%m-%d %H:%M:%S} 테스트 메시지 전송 성공")
+        cfg["telegram"] = tg
+        save_config(cfg)
+        return "테스트 메시지를 보냈습니다. 텔레그램을 확인하세요", None
+    # save
+    if tg["enabled"] and not tg["chat_id"]:
+        raise ValueError("알림을 켜려면 대화 ID가 필요합니다")
+    cfg["telegram"] = tg
+    save_config(cfg)
+    on = ", ".join(TOPICS[t][0] for t in tg["topics"]) or "선택 없음"
+    when = "하루 종일" if tg["send_from"] == tg["send_to"] else f"{tg['send_from']}~{tg['send_to']}"
+    return (f"텔레그램 설정을 저장했습니다 ({'켜짐' if tg['enabled'] else '꺼짐'} · {on} · "
+            f"{FREQUENCIES[tg['frequency']]} · {when})"), None
+
+
 @app.route("/settings/telegram", methods=["POST"])
 def telegram_settings():
     action, tg = request.form.get("action"), _tg_form()
     try:
-        if action != "clear" and not (TIME_RE.match(tg["send_from"]) and TIME_RE.match(tg["send_to"])):
-            raise TelegramError("보낼 시간대는 00:00 ~ 23:59 형식으로 입력하세요")
-        if action == "clear":
-            cfg.pop("telegram", None)
-            save_config(cfg)
-            flash("텔레그램 연결을 해제했습니다", "info")
-        elif not tg["token"]:
-            raise TelegramError("봇 토큰을 입력하세요")
-        elif action == "find_chat":
-            chats = find_chats(tg["token"])
-            if not chats:
-                raise TelegramError("봇에게 온 메시지가 없습니다. 텔레그램에서 봇에게 아무 메시지나 보낸 뒤 다시 눌러 주세요")
-            cfg["telegram"] = {**tg, "chat_id": tg["chat_id"] or chats[0]["id"]}
-            save_config(cfg)
+        message, chats = _apply_telegram(action, tg)
+        if chats is not None:
             session_chats["chats"] = chats
-            flash(f"대화 {len(chats)}개를 찾았습니다. 알림 받을 대화를 확인하세요", "info")
-        elif action == "test":
-            if not tg["chat_id"]:
-                raise TelegramError("대화 ID(chat id)를 입력하거나 '대화 찾기'를 눌러 주세요")
-            notifier.send_now("✅ WING 매니저 텔레그램 연결 테스트입니다.", tg["token"], tg["chat_id"])
-            notifier.record(True, f"{datetime.now():%m-%d %H:%M:%S} 테스트 메시지 전송 성공")
-            cfg["telegram"] = tg
-            save_config(cfg)
-            flash("테스트 메시지를 보냈습니다. 텔레그램을 확인하세요", "info")
-        else:  # save
-            if tg["enabled"] and not tg["chat_id"]:
-                raise TelegramError("알림을 켜려면 대화 ID가 필요합니다")
-            cfg["telegram"] = tg
-            save_config(cfg)
-            on = ", ".join(TOPICS[t][0] for t in tg["topics"]) or "선택 없음"
-            when = "하루 종일" if tg["send_from"] == tg["send_to"] else f"{tg['send_from']}~{tg['send_to']}"
-            flash(f"텔레그램 설정을 저장했습니다 ({'켜짐' if tg['enabled'] else '꺼짐'} · {on} · "
-                  f"{FREQUENCIES[tg['frequency']]} · {when})", "info")
-    except TelegramError as exc:
+        flash(message, "info")
+    except (TelegramError, ValueError) as exc:
         flash(f"텔레그램: {exc}", "danger")
         # 실패해도 입력한 대화 ID·선택 항목은 다시 보여 준다 (토큰은 보안상 다시 채우지 않음)
         session_chats["form"] = {k: v for k, v in tg.items() if k != "token"}
@@ -845,6 +857,136 @@ def api_keyword_suggest():
     return jsonify({"query": keywords.base_keyword(name), "limit": keywords.MAX_TAGS, "room": room,
                     "suggestions": suggestions, "errors": errors,
                     "mock": getattr(keyword_provider, "name", "") == "mock"})
+
+
+# ---- 설정 (새 화면) ----
+# 비밀값은 내보내지 않는다. 있는지 여부(has_*)만 준다 — 화면은 그걸로 충분하다.
+@app.route("/api/settings")
+def api_settings():
+    tg = cfg.get("telegram") or {}
+    return jsonify({
+        "keys": {
+            "access_key": cfg.get("access_key", ""),  # 공개키는 화면에서 확인할 수 있어야 한다
+            "has_secret_key": bool(cfg.get("secret_key")),
+            "vendor_id": cfg.get("vendor_id", ""),
+            "mode": client.mode,
+        },
+        "rules": {
+            "sync_interval_sec": int(cfg.get("sync_interval_sec") or 30),
+            "soldout_threshold": int(cfg.get("soldout_threshold") or 0),
+            "auto_soldout": bool(cfg.get("auto_soldout")),
+            "public_base_url": cfg.get("public_base_url", ""),
+        },
+        "theme": cfg.get("theme", "system"),
+        "themes": [{"id": k, "label": v} for k, v in THEMES.items()],
+        "telegram": {
+            "has_token": bool(tg.get("token")),
+            "chat_id": tg.get("chat_id", ""),
+            "enabled": bool(tg.get("enabled")),
+            "topics": list(tg.get("topics") or []),
+            "frequency": tg.get("frequency", "realtime"),
+            "send_from": tg.get("send_from", "00:00"),
+            "send_to": tg.get("send_to", "00:00"),
+            "outside": tg.get("outside", "hold"),
+            "pending": notifier.pending_count,
+            "window_open": notifier.window_open(),
+            "last_result": notifier.last_result,
+        },
+        # TOPICS 의 값은 (이름, 설명) 튜플이다
+        "topics": [{"id": k, "label": v[0]} for k, v in TOPICS.items()],
+        "frequencies": [{"id": k, "label": v} for k, v in FREQUENCIES.items()],
+        "categories": categories.summary(),
+        "mock_competitor_live": sync.competitor_is_mock_on_live,
+    })
+
+
+@app.route("/api/settings/keys", methods=["POST"])
+def api_settings_keys():
+    """action: test · save · clear. 빈 칸은 기존 값을 그대로 둔다."""
+    body = request.get_json(silent=True) or {}
+    action = body.get("action")
+    if action == "clear":
+        for k in ("access_key", "secret_key"):
+            cfg.pop(k, None)
+        save_config(cfg)
+        _apply_client(cfg)
+        return jsonify({"message": "API 키를 삭제했습니다 → 모의 모드", "mode": client.mode})
+
+    keys = {
+        "access_key": str(body.get("access_key") or "").strip() or cfg.get("access_key", ""),
+        "secret_key": str(body.get("secret_key") or "").strip() or cfg.get("secret_key", ""),
+        "vendor_id": str(body.get("vendor_id") or "").strip() or cfg.get("vendor_id", ""),
+    }
+    if not all(keys.values()):
+        return jsonify({"error": "Access Key, Secret Key, 업체코드를 모두 입력하세요"}), 400
+
+    if action == "test":
+        try:
+            CoupangClient(**keys).ping()
+        except (CoupangAPIError, OSError) as exc:
+            return jsonify({"error": f"연결 실패: {exc}"}), 502
+        return jsonify({"message": "연결 성공: 쿠팡 API 인증이 확인되었습니다"})
+
+    if action == "save":
+        cfg.update(keys)
+        save_config(cfg)
+        _apply_client(cfg)
+        return jsonify({"message": f"API 키를 저장했습니다 → {'실연동' if client.mode == 'live' else '모의'} 모드",
+                        "mode": client.mode})
+    return jsonify({"error": "알 수 없는 동작입니다"}), 400
+
+
+@app.route("/api/settings/rules", methods=["POST"])
+def api_settings_rules():
+    body = request.get_json(silent=True) or {}
+    base = str(body.get("public_base_url") or "").strip().rstrip("/")
+    try:  # 모두 검증한 뒤에 한꺼번에 반영 (일부만 바뀌는 일 방지)
+        interval = max(5, int(body.get("sync_interval_sec") or 30))
+        threshold = max(0, int(body.get("soldout_threshold") or 0))
+    except (TypeError, ValueError):
+        return jsonify({"error": "숫자를 입력하세요"}), 400
+    if base and not base.startswith(("http://", "https://")):
+        return jsonify({"error": "이미지 공개 주소는 http:// 또는 https:// 로 시작해야 합니다"}), 400
+    cfg.update(sync_interval_sec=interval, soldout_threshold=threshold,
+               auto_soldout=bool(body.get("auto_soldout")), public_base_url=base)
+    save_config(cfg)
+    return jsonify({"message": "자동화 설정을 저장했습니다"})
+
+
+@app.route("/api/settings/theme", methods=["POST"])
+def api_settings_theme():
+    theme = str((request.get_json(silent=True) or {}).get("theme") or "")
+    if theme not in THEMES:
+        return jsonify({"error": "화면 모드를 다시 고르세요"}), 400
+    cfg["theme"] = theme
+    save_config(cfg)
+    return jsonify({"message": f"화면 모드: {THEMES[theme]}"})
+
+
+@app.route("/api/settings/telegram", methods=["POST"])
+def api_settings_telegram():
+    """action: save · test · find_chat · clear. 토큰은 빈 칸이면 기존 값을 쓴다."""
+    body = request.get_json(silent=True) or {}
+    action = body.get("action")
+    old = cfg.get("telegram") or {}
+    tg = {
+        # 빈 토큰은 기존 값 유지 (토큰은 화면에 다시 보여주지 않는다)
+        "token": str(body.get("token") or "").strip() or old.get("token", ""),
+        "chat_id": str(body.get("chat_id") or "").strip(),
+        "enabled": bool(body.get("enabled")),
+        "topics": [t for t in (body.get("topics") or []) if t in TOPICS],
+        "frequency": body.get("frequency") if body.get("frequency") in FREQUENCIES else "realtime",
+        "send_from": str(body.get("send_from") or "00:00").strip() or "00:00",
+        "send_to": str(body.get("send_to") or "00:00").strip() or "00:00",
+        "outside": "drop" if body.get("outside") == "drop" else "hold",
+    }
+    try:
+        message, chats = _apply_telegram(action, tg)
+    except ValueError as exc:  # 내가 잘못 넣은 값
+        return jsonify({"error": str(exc)}), 400
+    except TelegramError as exc:  # 텔레그램 쪽 실패
+        return jsonify({"error": f"텔레그램: {exc}"}), 502
+    return jsonify({"message": message, "chats": chats})
 
 
 @app.route("/api/competitor-shop", methods=["POST"])
