@@ -20,6 +20,8 @@ import {
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Inventory = lazy(() => import("./pages/Inventory"));
+const Prices = lazy(() => import("./pages/Prices"));
+const Keywords = lazy(() => import("./pages/Keywords"));
 
 /**
  * 메뉴 — 기존 화면과 경로·순서·이름을 맞춘다.
@@ -69,6 +71,8 @@ function Shell() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/inventory" element={<Inventory />} />
+          <Route path="/prices" element={<Prices />} />
+          <Route path="/keywords" element={<Keywords />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>

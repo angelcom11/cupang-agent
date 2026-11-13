@@ -257,6 +257,8 @@ def _keyword_data(source: str) -> dict:
         source = keywords.DEFAULT_SOURCE
     mock = getattr(keyword_provider, "name", "") == "mock"
     out = {"source": source, "label": keywords.SOURCES[source][0], "mock": mock, "mock_on_live": mock and client.mode == "live",
+           # 새 화면이 출처 선택을 그리려면 목록이 필요하다 (Jinja 쪽은 라우트에서 따로 넘긴다)
+           "sources": [{"id": k, "label": v[0]} for k, v in keywords.SOURCES.items()],
            "products": [], "related_error": None, "checked": datetime.now().strftime("%H:%M:%S")}
     out["products"], out["related_error"] = keywords.product_rows(keyword_provider, store.items(), source)
     return out
@@ -269,14 +271,24 @@ def keyword_page():
                            mock=getattr(keyword_provider, "name", "") == "mock", mock_on_live=getattr(keyword_provider, "name", "") == "mock" and client.mode == "live")
 
 
+def _save_price_rule(vid: str, auto_reprice: bool, min_price, undercut) -> None:
+    """자동 가격조정 규칙. Jinja 화면과 새 화면이 같이 쓴다."""
+    _item_or_fail(vid)
+    store.update_rule(
+        vid, auto_reprice=1 if auto_reprice else 0,
+        min_price=int(min_price or 0), undercut=int(undercut or 0),
+    )
+
+
 @app.route("/prices/rule", methods=["POST"])
 def price_rule():
     f = request.form
-    store.update_rule(
-        f["vendor_item_id"], auto_reprice=1 if f.get("auto_reprice") else 0,
-        min_price=int(f.get("min_price") or 0), undercut=int(f.get("undercut") or 0),
-    )
-    flash("가격 규칙을 저장했습니다", "info")
+    try:
+        _save_price_rule(f["vendor_item_id"], bool(f.get("auto_reprice")),
+                         f.get("min_price"), f.get("undercut"))
+        flash("가격 규칙을 저장했습니다", "info")
+    except ValueError as exc:
+        flash(f"실패: {exc}", "danger")
     return redirect(url_for("prices"))
 
 
@@ -783,10 +795,29 @@ def api_categories():
 # ---------------- JSON API (실시간 갱신용) ----------------
 @app.route("/api/prices")
 def api_prices():
-    rows = _price_rows()
-    for r in rows:
-        r.pop("history", None)
-    return jsonify({"last_sync": sync.last_sync, "rows": rows})
+    """경쟁가 비교. 추이는 그래프에 필요한 값만 남겨 가볍게 보낸다."""
+    rows = []
+    for r in _price_rows():
+        rows.append({
+            **_json_item(r),
+            "history": [{"at": h["checked_at"], "low": h["low"], "mine": h["mine"]}
+                        for h in r.get("history", [])],
+        })
+    return jsonify({"last_sync": sync.last_sync, "error": sync.last_error, "rows": rows})
+
+
+@app.route("/api/prices/rule", methods=["POST"])
+def api_price_rule():
+    body = request.get_json(silent=True) or {}
+    vid = str(body.get("vendor_item_id") or "")
+    if not store.item(vid):
+        return jsonify({"error": "없는 상품입니다"}), 404
+    try:
+        _save_price_rule(vid, bool(body.get("auto_reprice")),
+                         body.get("min_price"), body.get("undercut"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "하한가와 인하폭은 숫자여야 합니다"}), 400
+    return jsonify({"message": "가격 규칙을 저장했습니다", "item": _json_item(_item_or_fail(vid))})
 
 
 @app.route("/api/keywords")
