@@ -132,6 +132,14 @@ def test_spa_is_served_at_ui_and_still_needs_login():
         A.app.config["WING_LOGIN_REQUIRED"] = False
 
 
+def test_jinja_register_stays_reachable_for_the_new_ui_menu():
+    """새 UI 의 '상품 등록' 은 아직 기존 화면으로 나가는 바깥 링크다.
+
+    이 경로가 사라지면 새 UI 에서 등록으로 갈 길이 끊긴다.
+    """
+    assert A.app.test_client().get("/register").status_code == 200
+
+
 def test_spa_answers_every_path_shape_including_a_trailing_slash():
     """'/ui/' 는 <path:_rest> 가 빈 문자열을 받지 않아 404 였다. 북마크하면 404 를 본다."""
     c = A.app.test_client()
