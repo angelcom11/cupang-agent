@@ -176,6 +176,8 @@
 :where(:root[data-theme=dark]) nav a{color:var(--text-2);border-radius:var(--r-sm)}
 :where(:root[data-theme=dark]) nav a:hover{background:var(--surface-2);color:var(--ink)}
 :where(:root[data-theme=dark]) nav a.on{background:var(--accent-soft);color:var(--accent-ink)}
+:where(:root[data-theme=dark]) nav a.navnew{border-top:1px solid var(--line);color:var(--text-3)}
+:where(:root[data-theme=dark]) nav a.navnew:hover{color:var(--ink)}
 :where(:root[data-theme=dark]) .status{color:var(--text-2);border-top:1px solid var(--line-soft)}
 :where(:root[data-theme=dark]) .status b{color:var(--ink)}
 :where(:root[data-theme=dark]) .status .err{color:var(--bad)}

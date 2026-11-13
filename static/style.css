@@ -421,6 +421,9 @@ nav a{display:flex;align-items:center;gap:10px;color:var(--text-2);padding:9px 1
 nav a svg{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;opacity:.7}
 nav a:hover{background:var(--surface-2);color:var(--ink)}
 nav a.on{background:var(--accent-soft);color:var(--accent-ink);font-weight:700}nav a.on svg{opacity:1}
+/* 루트는 새 화면이 쓴다. 여기서 돌아갈 길 — 메뉴 항목이 아니라 나가는 문이므로 구분해 둔다 */
+nav a.navnew{margin-top:6px;padding-top:12px;border-top:1px solid var(--line);color:var(--text-3);font-size:13px}
+nav a.navnew:hover{color:var(--ink)}
 .status{font-size:13px;color:var(--text-2);border-top:1px solid var(--line-soft);padding-top:14px}
 .status b{color:var(--ink)}.status .err{color:var(--bad)}
 .status>button:not(.hsum){background:var(--surface);color:var(--ink);border:1px solid var(--field)}

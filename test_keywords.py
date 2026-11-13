@@ -152,13 +152,13 @@ def test_product_rows_dedupe_isolate_failures_and_report_common_error():
 # ---------- 화면 · API ----------
 def test_page_has_menu_and_four_source_tabs_and_no_ranking():
     c = A.app.test_client()
-    html = c.get("/keywords").get_data(as_text=True)
-    assert 'href="/keywords" class="on"' in html and "내 상품 연관검색어" in html
+    html = c.get("/classic/keywords").get_data(as_text=True)
+    assert 'href="/classic/keywords" class="on"' in html and "내 상품 연관검색어" in html
     for sid, label in (("google", "구글"), ("naver", "네이버"), ("daum", "다음"), ("coupang", "쿠팡")):
         assert f'data-src="{sid}"' in html and label in html
     assert html.index('data-src="google"') < html.index('data-src="coupang"')   # 실제로 나오는 구글이 맨 앞
     assert 'id="kw-table"' not in html and "1위" not in html and "LIVE" not in html   # 순위 칸·자동 갱신 표시는 없다
-    assert 'href="/keywords" class=""' in c.get("/").get_data(as_text=True)         # 다른 화면에도 메뉴가 있다
+    assert 'href="/classic/keywords" class=""' in c.get("/classic/").get_data(as_text=True)         # 다른 화면에도 메뉴가 있다
     assert "모의(가짜) 검색어를 보여 주는 중" in html                              # 테스트는 모의 공급자
 
 
@@ -184,7 +184,7 @@ def test_page_still_works_when_a_source_breaks(monkeypatch):
     A.sync.run_once()
     monkeypatch.setattr(A, "keyword_provider", keywords.LiveKeywordProvider(get=Net(**{"google.com/complete": requests.ConnectTimeout("t")})))
     c = A.app.test_client()
-    assert c.get("/keywords").status_code == 200
+    assert c.get("/classic/keywords").status_code == 200
     d = c.get("/api/keywords?source=google").get_json()
     assert "연결하지 못했습니다" in d["related_error"] and d["products"] and all(p["keywords"] == [] for p in d["products"])
 

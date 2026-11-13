@@ -132,7 +132,7 @@ def _dashboard_data(items: list[dict], rows: list[dict]) -> dict:
 
 
 # ---------------- 페이지 ----------------
-@app.route("/")
+@app.route("/classic/")
 def dashboard():
     items = store.items()
     rows = _price_rows()
@@ -168,7 +168,7 @@ def export_alerts():
         "Content-Disposition": f"attachment; filename=wing-alerts-{datetime.now():%Y%m%d-%H%M%S}.log"})
 
 
-@app.route("/inventory", methods=["GET", "POST"])
+@app.route("/classic/inventory", methods=["GET", "POST"])
 def inventory():
     if request.method == "POST":
         vid = request.form["vendor_item_id"]
@@ -246,7 +246,7 @@ def delete_items():
     return redirect(url_for("inventory"))
 
 
-@app.route("/prices")
+@app.route("/classic/prices")
 def prices():
     return render_template("prices.html", rows=_price_rows())
 
@@ -264,7 +264,7 @@ def _keyword_data(source: str) -> dict:
     return out
 
 
-@app.route("/keywords")
+@app.route("/classic/keywords")
 def keyword_page():
     return render_template("keywords.html", sources=[{"id": k, "label": v[0]} for k, v in keywords.SOURCES.items()],
                            default_source=keywords.DEFAULT_SOURCE,
@@ -636,7 +636,7 @@ def _apply_client(new_cfg: dict):
     _cache.clear()  # 다른 계정·모드의 카테고리 메타/출고지를 섞지 않는다
 
 
-@app.route("/settings", methods=["GET", "POST"])
+@app.route("/classic/settings", methods=["GET", "POST"])
 def settings():
     if request.method == "POST":
         action = request.form.get("action")
@@ -1226,25 +1226,33 @@ def api_delete_items():
 
 
 # ---------------- 새 화면 (React + Astryx) ----------------
-# 전환 중에는 /ui 에서만 띄운다. 기존 Jinja 화면은 그대로 두고, 7개 화면을 다 옮긴 뒤
-# 루트를 이쪽으로 넘긴다. 번들은 web/ 에서 `npm run build` 로 static/dist 에 만든다.
-# 번들은 코드와 함께 배포되므로 BASE(소스 폴더) 기준이다 — DATA_DIR(사용자 데이터)이 아니다.
+# 새 화면이 루트를 쓴다. 기존 Jinja 화면은 지우지 않고 /classic/ 으로 옮겨 남겨 뒀다 —
+# 장사 중이라 새 화면에 문제가 생기면 바로 돌아갈 곳이 있어야 한다.
+# 상품 등록만은 아직 기존 화면이 본체다(/register). 단계 14개·입력 칸 53개라 옮기는
+# 위험이 커서, 나머지를 먼저 넘기고 등록은 그대로 둔다.
+# 번들은 web/ 에서 `npm run build` 로 static/dist 에 만든다. 코드와 함께 배포되므로
+# BASE(소스 폴더) 기준이다 — DATA_DIR(사용자 데이터)이 아니다.
 SPA_DIR = BASE / "static" / "dist"
 
+# 새 화면이 가진 경로만 적는다. catch-all 을 쓰면 /api·/static·/uploads 와 오타 주소까지
+# 삼켜서, 없는 주소가 404 대신 빈 화면으로 보인다.
+SPA_ROUTES = ("/", "/inventory", "/prices", "/keywords", "/settings")
 
-@app.route("/ui")
-@app.route("/ui/")  # <path:_rest> 는 빈 문자열을 받지 않는다 — '/ui/' 가 404 였다
-@app.route("/ui/<path:_rest>")
-def spa(_rest: str = ""):
-    """SPA 진입점. 경로는 브라우저 라우터가 처리하므로 어떤 하위 경로든 index.html 을 준다."""
+
+# 한 함수에 라우트를 여러 개 달면 url_for("spa") 가 어느 주소를 고를지 알 수 없다 —
+# 실제로 /settings 를 골라서 '새 화면' 링크와 로그인 후 목적지가 설정으로 갔다.
+# 경로마다 endpoint 를 따로 주면 url_for("spa") 는 반드시 루트다.
+@app.route("/", endpoint="spa")
+@app.route("/inventory", endpoint="spa_inventory")
+@app.route("/prices", endpoint="spa_prices")
+@app.route("/keywords", endpoint="spa_keywords")
+@app.route("/settings", endpoint="spa_settings")
+def spa():
+    """SPA 진입점. 어느 경로로 들어와도 같은 index.html 을 주고, 라우터가 화면을 고른다."""
     index = SPA_DIR / "index.html"
     if not index.exists():
-        return (
-            "<h1>새 화면이 아직 빌드되지 않았습니다</h1>"
-            "<p><code>cd web &amp;&amp; npm install &amp;&amp; npm run build</code> 를 실행하세요.</p>"
-            '<p><a href="/">기존 화면으로</a></p>',
-            503,
-        )
+        # 번들이 없으면 기존 화면으로 보낸다. 흰 화면보다 낫다.
+        return redirect(url_for("dashboard"))
     # 저장된 화면 모드를 HTML 에 심어 보낸다. 받아서 고치면 첫 화면이 밝게 떴다가
     # 어두워지는 번쩍임이 생긴다 — 그래서 왕복 없이 처음부터 넣어 준다.
     html = index.read_text(encoding="utf-8")
@@ -1253,6 +1261,15 @@ def spa(_rest: str = ""):
         mode = "system"
     html = html.replace("<head>", f'<head><meta name="wing-theme" content="{mode}">', 1)
     return Response(html, mimetype="text/html")
+
+
+@app.route("/ui")
+@app.route("/ui/")
+@app.route("/ui/<path:rest>")
+def spa_moved(rest: str = ""):
+    """전환 전에 새 화면이 살던 자리. 북마크해 둔 주소를 깨지 않게 같은 화면으로 보낸다."""
+    target = "/" + rest
+    return redirect(target if target in SPA_ROUTES else "/", code=301)
 
 
 @app.route("/api/ping")

@@ -26,6 +26,8 @@
       <button type="submit" title="{{ login_user }} 로그아웃"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 8l-4 4 4 4M6 12h10"/></svg>로그아웃</button>
     </form>
     {% endif %}
+    {# 이 화면들은 /classic/ 로 옮겨졌고 루트는 새 화면이 쓴다. 돌아올 길이 없으면 갇힌다. #}
+    <a href="{{ url_for('spa') }}" class="navnew" title="새 디자인 화면으로"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>새 화면</a>
   </nav>
   <div class="status" id="health">
     <button type="button" class="hsum" id="h-toggle" aria-expanded="false" title="연결 상태 자세히">

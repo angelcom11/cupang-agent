@@ -30,13 +30,20 @@ import type {Alert, DashboardData, FeaturedItem, PriceRow} from "../api";
  * error 가 없다 (primary·secondary·disabled·placeholder·accent·inherit 뿐).
  * 그래서 나쁜 수치는 Badge 로 보인다 — 개수를 나타내는 자리라 Badge 의 용도에 맞다.
  */
-function Kpi({label, value, isBad}: {label: string; value: string; isBad?: boolean}) {
+function Kpi({
+  label,
+  value,
+  isBad,
+  level = "danger",
+}: {label: string; value: string; isBad?: boolean; level?: "warn" | "danger"}) {
   return (
     <Card padding={4}>
       {/* align="start" 가 없으면 자식이 칸 폭 전체로 늘어난다 */}
       <VStack gap={1} align="start">
         <HStack gap={1.5} align="center">
-          {isBad === true ? <StatusDot variant="error" label="주의" /> : null}
+          {/* 심각도는 서버가 정한다 (services.py 의 alert level). 여기서 전부 빨강으로
+              칠하면 같은 사건이 KPI 에선 빨강, 알림 레일에선 주황으로 보인다. */}
+          {isBad === true ? <StatusDot variant={ALERT_DOT[level]} label="주의" /> : null}
           <Text size="sm" color="secondary" textWrap="nowrap">
             {label}
           </Text>
@@ -285,9 +292,11 @@ export default function Dashboard() {
             <Kpi label="판매 옵션 수" value={`${kpi.total}`} />
             <Kpi label="재고 금액" value={won(kpi.stock_value)} />
             {/* 판매중인 것만 센다 — 자동품절된 0개 재고는 아래 품절 칸으로 간다 */}
-            <Kpi label="재고 부족(판매중)" value={`${kpi.low}`} isBad={kpi.low > 0} />
+            {/* 수준은 services.py 와 맞춘다: 자동 품절은 danger, 최저가 밀림은 warn.
+                재고 부족은 아직 품절 전이라 warn 이다. */}
+            <Kpi label="재고 부족(판매중)" value={`${kpi.low}`} isBad={kpi.low > 0} level="warn" />
             <Kpi label="품절·판매중지" value={`${kpi.soldout}`} isBad={kpi.soldout > 0} />
-            <Kpi label="최저가 밀림" value={`${kpi.undercut}`} isBad={kpi.undercut > 0} />
+            <Kpi label="최저가 밀림" value={`${kpi.undercut}`} isBad={kpi.undercut > 0} level="warn" />
             <Kpi label="자동 가격조정 ON" value={`${kpi.auto}`} />
           </Grid>
 

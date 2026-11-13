@@ -41,5 +41,5 @@ def test_health_api(monkeypatch):
     h = A.app.test_client().get("/api/health").get_json()
     assert h["running"] and h["version"] and h["coupang"]["state"] == "bad" and "닿지 않습니다" in h["coupang"]["detail"]
     assert h["addresses"] == [{"url": "http://127.0.0.1:26118", "ip": "127.0.0.1", "kind": "이 컴퓨터", "current": False}]
-    page = A.app.test_client().get("/").get_data(as_text=True)
+    page = A.app.test_client().get("/classic/").get_data(as_text=True)
     assert 'id="h-app"' in page and 'id="h-addr"' in page and "/api/health" in page
